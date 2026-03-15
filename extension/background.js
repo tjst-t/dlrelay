@@ -163,9 +163,12 @@ function extractFilenameFromUrl(url) {
 }
 
 function isGenericFilename(name) {
-  const generic = ["download", "videoplayback", "player", "media", "video", "audio", "stream", "index"];
+  const generic = ["download", "videoplayback", "player", "media", "video", "audio", "stream", "index", "playlist", "master", "chunklist"];
   const base = name.replace(/\.[^.]+$/, "").toLowerCase();
-  return generic.includes(base) || base.length < 3;
+  if (generic.includes(base) || base.length < 3) return true;
+  // HLS/DASH URL-derived names like "video_360p", "stream_720p", "seg-1"
+  if (/^(video|audio|stream|media|seg|chunk)[\W_]/.test(base)) return true;
+  return false;
 }
 
 function sanitizeFilename(title) {

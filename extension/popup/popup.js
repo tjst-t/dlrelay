@@ -1,5 +1,17 @@
 // DL Relay — Popup UI
 
+function isGenericBase(base) {
+  const b = base.toLowerCase();
+  const generic = ["download", "videoplayback", "player", "media", "video", "audio", "stream", "index", "playlist", "master", "chunklist"];
+  if (generic.includes(b) || b.length < 3) return true;
+  if (/^(video|audio|stream|media|seg|chunk)[\W_]/.test(b)) return true;
+  return false;
+}
+
+function sanitizeForFilename(s) {
+  return s.replace(/[\/\\:*?"<>|]/g, "_").replace(/\s+/g, " ").trim().substring(0, 200);
+}
+
 const DEFAULTS = {
   enabled: true,
   serverUrl: "",
@@ -217,8 +229,12 @@ function createMediaItemElement(item) {
         if (variant) {
           downloadItem.url = variant.url;
           if (variant.audioUrl) downloadItem.audioUrl = variant.audioUrl;
-          const ext = downloadItem.filename.split(".").pop() || "mp4";
-          const base = downloadItem.filename.replace(/\.[^.]+$/, "");
+          // Use page title for filename if the current name is URL-derived generic
+          let base = downloadItem.filename.replace(/\.[^.]+$/, "");
+          if (item.title && isGenericBase(base)) {
+            base = sanitizeForFilename(item.title);
+          }
+          const ext = (downloadItem.filename.split(".").pop() || "mp4").replace(/^m3u8$/, "mp4");
           const safeLabel = (variant.label || "selected").replace(/[\/\\:*?"<>|]/g, "_");
           downloadItem.filename = `${base}_${safeLabel}.${ext}`;
         }
