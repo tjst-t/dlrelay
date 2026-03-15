@@ -1,0 +1,8 @@
+bin/
+/server
+/client
+*.exe
+.env
+node_modules/
+test/browser/screenshots/
+test/browser/results/

@@ -1,4 +1,4 @@
-# vdh-relay
+# dlrelay
 
 ブラウザで検出した動画をNASにダウンロードするシステム。
 
@@ -9,9 +9,9 @@
 ```
 クライアントPC                          NAS
 ┌─────────────────┐    HTTPS     ┌──────────────────────┐
-│  VDH Relay 拡張  │              │  Caddy (リバースプロキシ) │
+│  DL Relay 拡張  │              │  Caddy (リバースプロキシ) │
 │  ├─ 動画検出      │              │      ↓                │
-│  ├─ 画質選択      │ ──────────→ │  vdh-relay-server     │
+│  ├─ 画質選択      │ ──────────→ │  dlrelay-server     │
 │  └─ DLボタン     │              │  ├─ REST API          │
 │                  │              │  ├─ HTTPダウンローダー   │
 └─────────────────┘              │  ├─ HLS/DASHダウンローダー│
@@ -25,9 +25,8 @@
 
 | コンポーネント | 説明 |
 |---|---|
-| **vdh-relay-server** | NAS上のDockerコンテナ。ダウンロード実行・FFmpeg変換・進捗管理 |
-| **VDH Relay 拡張** | ブラウザ拡張。動画を自動検出し、サーバーにダウンロードを指示 |
-| **vdh-relay (クライアント)** | **オプション:** VDH互換のNative Messaging Host。既存VDHを使い続ける場合のみ必要 |
+| **dlrelay-server** | NAS上のDockerコンテナ。ダウンロード実行・FFmpeg変換・進捗管理 |
+| **DL Relay 拡張** | ブラウザ拡張。動画を自動検出し、サーバーにダウンロードを指示 |
 
 ## クイックスタート
 
@@ -35,12 +34,12 @@
 
 ```bash
 # Docker
-docker build -t vdh-relay-server .
+docker build -t dlrelay-server .
 docker run -d \
   -p 8090:8090 \
-  -v /tank/downloads/vdh:/downloads \
+  -v /tank/downloads:/downloads \
   -e MAX_CONCURRENT=3 \
-  vdh-relay-server
+  dlrelay-server
 
 # または直接
 make serve
@@ -81,7 +80,7 @@ make serve
 ## ビルド
 
 ```bash
-make build-all      # サーバー + クライアント
+make build-server   # サーバー
 make docker-build   # Dockerイメージ
 make test           # テスト
 make pack-extension # 拡張zipパッケージ
@@ -95,7 +94,6 @@ make pack-extension # 拡張zipパッケージ
 | `DOWNLOAD_DIR` | `/downloads` | ダウンロード保存先 |
 | `TEMP_DIR` | システム依存 | 一時ファイル |
 | `MAX_CONCURRENT` | `3` | 最大同時ダウンロード数 |
-| `BIN_DIR` | (なし) | クライアントバイナリ配布用 |
 | `EXTENSION_DIR` | (なし) | 拡張機能ソースディレクトリ (WebUIからのDL用) |
 | `API_KEY` | (なし) | API認証キー（設定時、書き込みAPIに `X-API-Key` ヘッダーが必要） |
 | `DOWNLOAD_RULES` | (なし) | ドメイン別ダウンロード先ルール（後述） |
@@ -123,16 +121,16 @@ Docker での使用例:
 ```bash
 docker run -d \
   -p 8090:8090 \
-  -v /tank/downloads/vdh:/downloads \
+  -v /tank/downloads:/downloads \
   -v /tank/downloads/youtube:/downloads/youtube \
   -e DOWNLOAD_RULES="youtube.com:/downloads/youtube" \
   -e MAX_CONCURRENT=3 \
-  vdh-relay-server
+  dlrelay-server
 ```
 
 ### ダウンロードの永続化
 
-ダウンロード状態は `DOWNLOAD_DIR/.vdh-relay/downloads.json` に自動保存される。サーバーを再起動しても、完了済みのダウンロード履歴が保持され、未完了のダウンロードは自動的に再開される。
+ダウンロード状態は `DOWNLOAD_DIR/.dlrelay/downloads.json` に自動保存される。サーバーを再起動しても、完了済みのダウンロード履歴が保持され、未完了のダウンロードは自動的に再開される。
 
 ## API
 
@@ -178,21 +176,6 @@ GET    /api/extension.zip       拡張機能 (サーバーURL設定済み)
 POST   /api/probe               ffprobe実行
 GET    /api/codecs              利用可能コーデック一覧
 GET    /api/formats             利用可能フォーマット一覧
-```
-
-## VDH CoApp 互換クライアント (オプション)
-
-既存のVideoDownloadHelperを使い続ける場合のみ必要。拡張機能だけで十分な場合は不要。
-
-```bash
-# サーバーのWebUIから1行インストール
-curl -fsSL http://your-nas:8090/api/install.sh | bash
-
-# または手動
-make build-client
-./bin/vdh-relay install
-mkdir -p ~/.config/vdh-relay
-echo 'server_url = "http://your-nas:8090"' > ~/.config/vdh-relay/config.toml
 ```
 
 ## ドキュメント

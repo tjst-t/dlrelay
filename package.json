@@ -1,0 +1,27 @@
+{
+  "name": "dlrelay",
+  "version": "1.0.0",
+  "description": "ブラウザで検出した動画をNASにダウンロードするシステム。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/tjst-t/dlrelay.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/tjst-t/dlrelay/issues"
+  },
+  "homepage": "https://github.com/tjst-t/dlrelay#readme",
+  "dependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}

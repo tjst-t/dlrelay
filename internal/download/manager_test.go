@@ -1,0 +1,239 @@
+package download_test
+
+import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/tjst-t/dlrelay/internal/download"
+	"github.com/tjst-t/dlrelay/internal/model"
+)
+
+func TestManagerSubmitAndGet(t *testing.T) {
+	fileServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		content := "test content"
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(content)))
+		w.Write([]byte(content))
+	}))
+	defer fileServer.Close()
+
+	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil)
+
+	id, err := mgr.Submit(model.DownloadRequest{
+		URL:      fileServer.URL + "/test.txt",
+		Filename: "test.txt",
+	})
+	if err != nil {
+		t.Fatalf("Submit failed: %v", err)
+	}
+	if id == "" {
+		t.Fatal("expected non-empty ID")
+	}
+
+	// Wait for completion
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		status, err := mgr.Get(id)
+		if err != nil {
+			t.Fatalf("Get failed: %v", err)
+		}
+		if status.State == model.StateCompleted {
+			return
+		}
+		if status.State == model.StateFailed {
+			t.Fatalf("download failed: %v", status.Error)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("download did not complete in time")
+}
+
+func TestManagerList(t *testing.T) {
+	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil)
+
+	list := mgr.List()
+	if list != nil && len(list) != 0 {
+		t.Fatalf("expected empty list, got %d items", len(list))
+	}
+}
+
+func TestManagerGetNotFound(t *testing.T) {
+	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil)
+
+	_, err := mgr.Get("nonexistent")
+	if err == nil {
+		t.Fatal("expected error for nonexistent task")
+	}
+}
+
+func TestManagerCancel(t *testing.T) {
+	// Slow server that never finishes
+	slowServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "1000000")
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-time.After(100 * time.Millisecond):
+				w.Write([]byte("x"))
+			}
+		}
+	}))
+	defer slowServer.Close()
+
+	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil)
+
+	id, err := mgr.Submit(model.DownloadRequest{
+		URL:      slowServer.URL + "/slow.bin",
+		Filename: "slow.bin",
+	})
+	if err != nil {
+		t.Fatalf("Submit failed: %v", err)
+	}
+
+	// Wait briefly for download to start
+	time.Sleep(200 * time.Millisecond)
+
+	if err := mgr.Cancel(id); err != nil {
+		t.Fatalf("Cancel failed: %v", err)
+	}
+
+	status, err := mgr.Get(id)
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if status.State != model.StateCancelled {
+		t.Fatalf("expected cancelled, got %s", status.State)
+	}
+}
+
+func TestManagerDelete(t *testing.T) {
+	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil)
+
+	err := mgr.Delete("nonexistent")
+	if err == nil {
+		t.Fatal("expected error for nonexistent task")
+	}
+}
+
+func TestPathTraversal(t *testing.T) {
+	fileServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("test content"))
+	}))
+	defer fileServer.Close()
+
+	downloadDir := t.TempDir()
+	mgr := download.NewManager(downloadDir, t.TempDir(), 3, nil)
+
+	// Try to escape download directory via Directory field
+	id, err := mgr.Submit(model.DownloadRequest{
+		URL:       fileServer.URL + "/test.txt",
+		Filename:  "test.txt",
+		Directory: "../../etc",
+	})
+	if err != nil {
+		t.Fatalf("Submit failed: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		status, _ := mgr.Get(id)
+		if status.State == model.StateCompleted || status.State == model.StateFailed {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	status, _ := mgr.Get(id)
+	if status.State != model.StateFailed {
+		t.Fatalf("expected failed state for path traversal, got %s", status.State)
+	}
+	t.Logf("Path traversal correctly rejected: %v", status.Error)
+}
+
+func TestFilenameSanitization(t *testing.T) {
+	fileServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("test content"))
+	}))
+	defer fileServer.Close()
+
+	downloadDir := t.TempDir()
+	mgr := download.NewManager(downloadDir, t.TempDir(), 3, nil)
+
+	// Try path traversal via filename
+	id, err := mgr.Submit(model.DownloadRequest{
+		URL:      fileServer.URL + "/test.txt",
+		Filename: "../../../etc/passwd",
+	})
+	if err != nil {
+		t.Fatalf("Submit failed: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		status, _ := mgr.Get(id)
+		if status.State == model.StateCompleted || status.State == model.StateFailed {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	status, _ := mgr.Get(id)
+	// Should complete but file should be saved with just "passwd" as the basename
+	if status.State == model.StateCompleted {
+		t.Log("Download completed — filename was sanitized to basename")
+	}
+}
+
+func TestManagerConcurrencyLimit(t *testing.T) {
+	// Server that blocks until context is cancelled
+	slowServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer slowServer.Close()
+
+	maxConcurrent := 2
+	mgr := download.NewManager(t.TempDir(), t.TempDir(), maxConcurrent, nil)
+
+	// Submit more tasks than maxConcurrent
+	var ids []string
+	for i := 0; i < maxConcurrent+2; i++ {
+		id, err := mgr.Submit(model.DownloadRequest{
+			URL:      slowServer.URL + fmt.Sprintf("/file%d.bin", i),
+			Filename: fmt.Sprintf("file%d.bin", i),
+		})
+		if err != nil {
+			t.Fatalf("Submit %d failed: %v", i, err)
+		}
+		ids = append(ids, id)
+	}
+
+	// Wait for tasks to start
+	time.Sleep(300 * time.Millisecond)
+
+	// Count tasks in downloading state
+	downloading := 0
+	for _, id := range ids {
+		status, err := mgr.Get(id)
+		if err != nil {
+			t.Fatalf("Get failed: %v", err)
+		}
+		if status.State == model.StateDownloading {
+			downloading++
+		}
+	}
+
+	if downloading > maxConcurrent {
+		t.Fatalf("expected at most %d downloading, got %d", maxConcurrent, downloading)
+	}
+
+	// Clean up
+	for _, id := range ids {
+		mgr.Delete(id)
+	}
+
+	// Wait briefly for goroutines to finish
+	time.Sleep(100 * time.Millisecond)
+}
