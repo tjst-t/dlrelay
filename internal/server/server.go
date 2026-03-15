@@ -96,8 +96,8 @@ func (s *Server) routes() {
 
 	// HTML pages (no JSON content-type)
 	s.router.Group(func(r chi.Router) {
-		r.Get("/", s.handlePage)
-		r.Get("/status", s.handleStatusPage)
+		r.Get("/", s.handleStatusPage)
+		r.Get("/setup", s.handlePage)
 		r.Get("/bookmarklet", s.handleBookmarkletPage)
 	})
 

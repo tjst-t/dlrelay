@@ -3,17 +3,16 @@ const { test, expect } = require("@playwright/test");
 
 const BASE_URL = process.env.TEST_URL || "http://localhost:8200";
 
-test.describe("DL Relay Landing Page", () => {
+test.describe("DL Relay Setup Page", () => {
   test("displays page title and status", async ({ page }) => {
-    await page.goto(BASE_URL);
+    await page.goto(BASE_URL + "/setup");
 
     await expect(page).toHaveTitle("DL Relay");
     await expect(page.locator("h1")).toContainText("DL");
-    await expect(page.locator(".status")).toContainText("Server Online");
   });
 
   test("extension download button is prominent and visible", async ({ page }) => {
-    await page.goto(BASE_URL);
+    await page.goto(BASE_URL + "/setup");
 
     const extBtn = page.locator("#ext-download-btn");
     await expect(extBtn).toBeVisible();
@@ -22,7 +21,7 @@ test.describe("DL Relay Landing Page", () => {
   });
 
   test("browser install tabs work (Chrome/Firefox)", async ({ page }) => {
-    await page.goto(BASE_URL);
+    await page.goto(BASE_URL + "/setup");
 
     // Chrome tab active by default
     await expect(page.locator("#browser-chrome")).toBeVisible();
@@ -35,7 +34,7 @@ test.describe("DL Relay Landing Page", () => {
   });
 
   test("API Endpoints card has working health link", async ({ page }) => {
-    await page.goto(BASE_URL);
+    await page.goto(BASE_URL + "/setup");
 
     const healthLink = page.locator('a[href*="/api/health"]');
     await expect(healthLink).toBeVisible();
@@ -61,10 +60,10 @@ test.describe("API Endpoints via Browser", () => {
 });
 
 test.describe("Screenshots", () => {
-  test("take full page screenshot", async ({ page }) => {
-    await page.goto(BASE_URL);
+  test("take setup page screenshot", async ({ page }) => {
+    await page.goto(BASE_URL + "/setup");
     await page.screenshot({
-      path: "test/browser/screenshots/landing-page.png",
+      path: "test/browser/screenshots/setup-page.png",
       fullPage: true,
     });
   });

@@ -106,7 +106,7 @@ test.describe("Status Dashboard with DASH downloads", () => {
       },
     });
 
-    await page.goto(BASE_URL + "/status");
+    await page.goto(BASE_URL);
     await page.waitForSelector("table", { timeout: 5000 });
 
     await expect(page.locator("table")).toBeVisible();

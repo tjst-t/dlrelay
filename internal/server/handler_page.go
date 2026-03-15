@@ -429,7 +429,7 @@ code {
         <span id="status-text">...</span>
       </div>
       <a class="header-link" href="{{SERVER_URL}}/bookmarklet">Bookmarklet</a>
-      <a class="header-link" href="{{SERVER_URL}}/status">Downloads &rarr;</a>
+      <a class="header-link" href="{{SERVER_URL}}/">Downloads &rarr;</a>
     </div>
   </header>
 

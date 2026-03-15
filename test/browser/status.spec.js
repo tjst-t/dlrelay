@@ -4,10 +4,9 @@ const { test, expect } = require("@playwright/test");
 const BASE_URL = process.env.TEST_URL || "http://localhost:8200";
 
 test.describe("Download Status Dashboard", () => {
-  test("page loads and has correct title", async ({ page }) => {
-    await page.goto(BASE_URL + "/status");
+  test("root page loads and has correct title", async ({ page }) => {
+    await page.goto(BASE_URL);
     await expect(page).toHaveTitle("DL Relay — Downloads");
-    await expect(page.locator("header h1")).toContainText("Downloads");
     await expect(page.locator(".stats")).toBeVisible();
     await page.screenshot({
       path: "test/browser/screenshots/status-empty.png",
@@ -24,7 +23,7 @@ test.describe("Download Status Dashboard", () => {
       },
     });
 
-    await page.goto(BASE_URL + "/status");
+    await page.goto(BASE_URL);
 
     // Wait for auto-refresh to populate
     await page.waitForSelector("table", { timeout: 5000 });
@@ -45,16 +44,14 @@ test.describe("Download Status Dashboard", () => {
     });
   });
 
-  test("has link from landing page", async ({ page }) => {
+  test("header has Extension and Bookmarklet links", async ({ page }) => {
     await page.goto(BASE_URL);
-    const link = page.locator('a[href*="/status"]');
-    await expect(link).toBeVisible();
-    await expect(link).toContainText("Download Status");
+    await expect(page.locator('a[href*="/setup"]')).toBeVisible();
+    await expect(page.locator('a[href*="/bookmarklet"]')).toBeVisible();
   });
 
   test("page structure is correct", async ({ page }) => {
-    await page.goto(BASE_URL + "/status");
-    await expect(page.locator("header h1")).toContainText("Downloads");
+    await page.goto(BASE_URL);
     await expect(page.locator(".stats")).toBeVisible();
     // Verify all 4 stat cards exist
     await expect(page.locator("#stat-total")).toBeVisible();

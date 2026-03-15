@@ -77,6 +77,14 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
 }
 .logo em { font-style: normal; color: var(--accent); }
 .logo span { color: var(--muted); font-weight: 600; }
+.header-right { display: flex; align-items: center; gap: 1.25rem; }
+.header-link {
+  font-size: 0.85rem;
+  color: var(--text-2);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.header-link:hover { color: var(--accent); }
 .refresh-info { color: var(--muted); font-size: 0.78rem; }
 .stats { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
 .stat {
@@ -286,8 +294,12 @@ tr:hover td { background: rgba(232, 152, 48, 0.02); }
 <body>
 <div class="container">
   <header class="header">
-    <div class="logo"><a href="/"><em>DL</em> Relay</a> <span>/ Downloads</span></div>
-    <div class="refresh-info">Auto-refresh: <span id="countdown">2</span>s</div>
+    <div class="logo"><em>DL</em> Relay</div>
+    <div class="header-right">
+      <a class="header-link" href="{{SERVER_URL}}/setup">Extension</a>
+      <a class="header-link" href="{{SERVER_URL}}/bookmarklet">Bookmarklet</a>
+      <div class="refresh-info">Auto-refresh: <span id="countdown">2</span>s</div>
+    </div>
   </header>
 
   <div class="stats" id="stats">
