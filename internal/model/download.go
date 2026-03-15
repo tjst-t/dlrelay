@@ -2,13 +2,14 @@ package model
 
 // DownloadRequest is the request body for POST /api/downloads.
 type DownloadRequest struct {
-	URL       string            `json:"url"`
-	AudioURL  string            `json:"audio_url,omitempty"`
-	Headers   map[string]string `json:"headers,omitempty"`
-	Filename  string            `json:"filename"`
-	Directory string            `json:"directory,omitempty"`
-	Method    string            `json:"method,omitempty"` // "ytdlp" to use yt-dlp
-	Quality   string            `json:"quality,omitempty"` // yt-dlp format selector (e.g. "bestvideo+bestaudio/best")
+	URL         string            `json:"url"`
+	AudioURL    string            `json:"audio_url,omitempty"`
+	FallbackURL string            `json:"fallback_url,omitempty"` // Used when primary method (e.g. yt-dlp) fails
+	Headers     map[string]string `json:"headers,omitempty"`
+	Filename    string            `json:"filename"`
+	Directory   string            `json:"directory,omitempty"`
+	Method      string            `json:"method,omitempty"`  // "ytdlp" to use yt-dlp
+	Quality     string            `json:"quality,omitempty"` // yt-dlp format selector (e.g. "bestvideo+bestaudio/best")
 }
 
 // DownloadState represents the current state of a download task.

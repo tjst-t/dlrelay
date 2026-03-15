@@ -129,21 +129,33 @@ func (m *Manager) executeDownload(ctx context.Context, task *Task, req model.Dow
 	dlDir := m.resolveDownloadDir(req.URL)
 
 	var err error
-	urlLower := strings.ToLower(req.URL)
 	switch {
 	case req.Method == "ytdlp":
 		err = YtdlpDownload(ctx, task, dlDir)
+		// Fallback: if yt-dlp fails and a fallback URL is available, retry with it
+		if err != nil && ctx.Err() == nil && req.FallbackURL != "" {
+			slog.Info("yt-dlp failed, trying fallback URL", "url", req.FallbackURL, "ytdlp_err", err)
+			task.ResetForRetry(req.FallbackURL)
+			err = m.downloadByURL(ctx, task, req.FallbackURL, dlDir)
+		}
 	case req.AudioURL != "":
 		err = DASHDownload(ctx, task, dlDir, m.tempDir)
-	case strings.Contains(urlLower, ".m3u8") || strings.Contains(urlLower, "m3u8"):
-		err = HLSDownload(ctx, task, dlDir, m.tempDir)
 	default:
-		err = HTTPDownload(ctx, task, dlDir, m.tempDir)
+		err = m.downloadByURL(ctx, task, req.URL, dlDir)
 	}
 
 	if err != nil && ctx.Err() == nil {
 		task.SetError(err.Error())
 	}
+}
+
+// downloadByURL picks the right downloader (HLS or HTTP) based on the URL.
+func (m *Manager) downloadByURL(ctx context.Context, task *Task, url string, dlDir string) error {
+	urlLower := strings.ToLower(url)
+	if strings.Contains(urlLower, ".m3u8") || strings.Contains(urlLower, "m3u8") {
+		return HLSDownload(ctx, task, dlDir, m.tempDir)
+	}
+	return HTTPDownload(ctx, task, dlDir, m.tempDir)
 }
 
 // schedulePersist debounces persist calls, writing at most once per second.

@@ -570,6 +570,23 @@ async function handleDownloadRequest(item, tabId) {
     if (headers["Referer"]) payload.headers["Referer"] = headers["Referer"];
     // User-Agent must match what the browser sent (cf_clearance is UA-bound)
     payload.headers["User-Agent"] = navigator.userAgent;
+
+    // Attach a fallback URL from detected streams (HLS/HTTP) on the same tab.
+    // If yt-dlp doesn't support this site, the server retries with this URL.
+    if (tabId != null) {
+      const others = getTabMedia(tabId).filter(m => m.type !== "ytdlp" && m.url !== item.url);
+      // Prefer HLS > DASH > HTTP, then largest size
+      const ranked = others.sort((a, b) => {
+        const typeOrder = { hls: 0, dash: 1, http: 2 };
+        const ta = typeOrder[a.type] ?? 9;
+        const tb = typeOrder[b.type] ?? 9;
+        if (ta !== tb) return ta - tb;
+        return (b.size || 0) - (a.size || 0);
+      });
+      if (ranked.length > 0) {
+        payload.fallback_url = ranked[0].url;
+      }
+    }
   }
 
   // Add audio_url for DASH with separate audio

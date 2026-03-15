@@ -71,6 +71,21 @@ func (t *Task) SetFilePath(path string) {
 	t.filePath = path
 }
 
+// ResetForRetry resets the task state to retry with a different URL.
+func (t *Task) ResetForRetry(newURL string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.url = newURL
+	t.req.URL = newURL
+	t.req.Method = ""
+	t.req.FallbackURL = ""
+	t.state = model.StateQueued
+	t.bytes = 0
+	t.total = 0
+	t.err = ""
+	t.filePath = ""
+}
+
 // Cancel cancels the download task.
 func (t *Task) Cancel() {
 	t.mu.Lock()
