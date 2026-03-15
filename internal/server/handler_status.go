@@ -173,7 +173,7 @@ tr:hover td { background: rgba(232, 152, 48, 0.02); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.btn-cancel, .btn-preview {
+.btn-cancel, .btn-preview, .btn-delete {
   background: none;
   padding: 0.18rem 0.5rem;
   border-radius: 4px;
@@ -187,12 +187,32 @@ tr:hover td { background: rgba(232, 152, 48, 0.02); }
   color: var(--red);
 }
 .btn-cancel:hover { background: var(--red); color: var(--bg); }
+.btn-delete {
+  border: 1px solid var(--muted);
+  color: var(--muted);
+}
+.btn-delete:hover { background: var(--muted); color: var(--bg); }
 .btn-preview {
   border: 1px solid var(--green);
   color: var(--green);
   margin-right: 0.3rem;
 }
 .btn-preview:hover { background: var(--green); color: var(--bg); }
+.btn-clear {
+  background: none;
+  border: 1px solid var(--muted);
+  color: var(--muted);
+  padding: 0.3rem 0.8rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.btn-clear:hover { background: var(--muted); color: var(--bg); }
+.btn-clear:disabled { opacity: 0.3; cursor: default; }
+.btn-clear:disabled:hover { background: none; color: var(--muted); }
+.toolbar { display: flex; justify-content: flex-end; margin-bottom: 0.75rem; }
 .modal-overlay {
   display: none;
   position: fixed;
@@ -318,8 +338,23 @@ function fillClass(state) {
 }
 
 function cancelDownload(id) {
-  fetch(API + "/api/downloads/" + id, { method: "DELETE" });
-  refresh();
+  fetch(API + "/api/downloads/" + id, { method: "DELETE" }).then(function() { refresh(); });
+}
+
+function deleteDownload(id) {
+  fetch(API + "/api/downloads/" + id, { method: "DELETE" }).then(function() { refresh(); });
+}
+
+function clearFinished() {
+  fetch(API + "/api/downloads").then(function(r) { return r.json(); }).then(function(list) {
+    var targets = list.filter(function(d) {
+      return d.state === "completed" || d.state === "failed" || d.state === "cancelled";
+    });
+    var promises = targets.map(function(d) {
+      return fetch(API + "/api/downloads/" + d.id, { method: "DELETE" });
+    });
+    Promise.all(promises).then(function() { refresh(); });
+  });
 }
 
 function isVideoFile(filename) {
@@ -368,10 +403,17 @@ function refresh() {
     var order = { downloading: 0, queued: 1, failed: 2, cancelled: 3, completed: 4 };
     list.sort(function(a, b) { return (order[a.state] || 9) - (order[b.state] || 9); });
 
-    var html = '<table><thead><tr><th>File</th><th>Status</th><th>Progress</th><th>Size</th><th></th></tr></thead><tbody>';
+    var hasFinished = list.some(function(d) { return d.state === "completed" || d.state === "failed" || d.state === "cancelled"; });
+    var html = '';
+    if (hasFinished) {
+      html += '<div class="toolbar"><button class="btn-clear" onclick="clearFinished()">Clear Finished</button></div>';
+    }
+
+    html += '<table><thead><tr><th>File</th><th>Status</th><th>Progress</th><th>Size</th><th></th></tr></thead><tbody>';
     list.forEach(function(dl) {
       var pct = progressPct(dl);
       var canCancel = dl.state === "downloading" || dl.state === "queued";
+      var isDone = dl.state === "completed" || dl.state === "failed" || dl.state === "cancelled";
       html += '<tr>';
       html += '<td><div class="filename" title="' + esc(dl.filename) + '">' + esc(dl.filename) + '</div><div class="url" title="' + esc(dl.url) + '">' + esc(dl.url) + '</div></td>';
       html += '<td><span class="' + badgeClass(dl.state) + '">' + dl.state + '</span>';
@@ -385,6 +427,9 @@ function refresh() {
       }
       if (canCancel) {
         actions += '<button class="btn-cancel" onclick="cancelDownload(\'' + dl.id + '\')">Cancel</button>';
+      }
+      if (isDone) {
+        actions += '<button class="btn-delete" onclick="deleteDownload(\'' + dl.id + '\')" title="Remove from list">&times;</button>';
       }
       html += '<td>' + actions + '</td>';
       html += '</tr>';
