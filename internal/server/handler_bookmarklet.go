@@ -91,7 +91,9 @@ code {
   letter-spacing: -0.02em;
 }
 .logo em { font-style: normal; color: var(--accent); }
-.logo span { color: var(--muted); font-weight: 600; }
+.logo a { color: inherit; text-decoration: none; }
+.logo a:hover { color: inherit; }
+.header-right { display: flex; align-items: center; gap: 1.25rem; }
 .header-link {
   font-size: 0.85rem;
   color: var(--text-2);
@@ -99,6 +101,7 @@ code {
   transition: color 0.15s;
 }
 .header-link:hover { color: var(--accent); }
+.header-link-active { color: var(--accent); }
 .hero {
   text-align: center;
   padding: 1rem 0 2.5rem;
@@ -314,6 +317,8 @@ code {
   to { opacity: 1; transform: translateY(0); }
 }
 @media (max-width: 600px) {
+  .header { flex-wrap: wrap; gap: 0.5rem; }
+  .header-right { gap: 0.75rem; }
   .hero h1 { font-size: 1.5rem; }
   .bm-methods { grid-template-columns: 1fr; }
   .feature-grid { grid-template-columns: 1fr; }
@@ -324,8 +329,12 @@ code {
 <body>
 <div class="wrap">
   <header class="header">
-    <div class="logo"><a href="/"><em>DL</em> Relay</a> <span>/ Bookmarklet</span></div>
-    <a class="header-link" href="{{SERVER_URL}}/status">Downloads &rarr;</a>
+    <div class="logo"><a href="/"><em>DL</em> Relay</a></div>
+    <nav class="header-right">
+      <a class="header-link" href="{{SERVER_URL}}/">Downloads</a>
+      <a class="header-link" href="{{SERVER_URL}}/setup">Extension</a>
+      <a class="header-link header-link-active" href="{{SERVER_URL}}/bookmarklet">Bookmarklet</a>
+    </nav>
   </header>
 
   <section class="hero">

@@ -46,7 +46,6 @@ body {
   color: var(--text);
   min-height: 100vh;
   line-height: 1.6;
-  padding: 0 1rem;
   overflow-x: hidden;
 }
 body::after {
@@ -58,10 +57,12 @@ body::after {
   pointer-events: none;
   z-index: 10000;
 }
-.container { max-width: 960px; margin: 0 auto; overflow: hidden; }
+.wrap { max-width: 960px; margin: 0 auto; padding: 0 1.5rem; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { color: var(--accent-hover); }
 code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
+.logo a { color: inherit; text-decoration: none; }
+.logo a:hover { color: inherit; }
 .header {
   padding: 1.25rem 0;
   display: flex;
@@ -86,6 +87,7 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
   transition: color 0.15s;
 }
 .header-link:hover { color: var(--accent); }
+.header-link-active { color: var(--accent); }
 .refresh-info { color: var(--muted); font-size: 0.78rem; }
 .stats { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
 .stat {
@@ -341,14 +343,15 @@ tr:hover td { background: rgba(232, 152, 48, 0.02); }
 </style>
 </head>
 <body>
-<div class="container">
+<div class="wrap">
   <header class="header">
-    <div class="logo"><em>DL</em> Relay</div>
-    <div class="header-right">
+    <div class="logo"><a href="/"><em>DL</em> Relay</a></div>
+    <nav class="header-right">
+      <a class="header-link header-link-active" href="{{SERVER_URL}}/">Downloads</a>
       <a class="header-link" href="{{SERVER_URL}}/setup">Extension</a>
       <a class="header-link" href="{{SERVER_URL}}/bookmarklet">Bookmarklet</a>
       <div class="refresh-info">Auto-refresh: <span id="countdown">2</span>s</div>
-    </div>
+    </nav>
   </header>
 
   <div class="stats" id="stats">

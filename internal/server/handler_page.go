@@ -104,6 +104,8 @@ code {
   letter-spacing: -0.02em;
 }
 .logo em { font-style: normal; color: var(--accent); }
+.logo a { color: inherit; text-decoration: none; }
+.logo a:hover { color: inherit; }
 .header-right { display: flex; align-items: center; gap: 1.25rem; }
 .status-badge {
   display: inline-flex;
@@ -130,6 +132,7 @@ code {
   transition: color 0.15s;
 }
 .header-link:hover { color: var(--accent); }
+.header-link-active { color: var(--accent); }
 .hero {
   text-align: center;
   padding: 1.5rem 0 2.5rem;
@@ -407,6 +410,8 @@ code {
   50% { box-shadow: 0 0 10px var(--green), 0 0 18px rgba(48, 216, 128, 0.2); }
 }
 @media (max-width: 600px) {
+  .header { flex-wrap: wrap; gap: 0.5rem; margin-bottom: 2rem; }
+  .header-right { gap: 0.75rem; }
   .hero h1 { font-size: 1.5rem; }
   .flow-connector { flex: 0 0 36px; }
   .flow-node { min-width: 76px; }
@@ -415,22 +420,22 @@ code {
   .step { gap: 0.75rem; }
   .api-desc { display: none; }
   .api-row { padding: 0.45rem 0.7rem; }
-  .header { margin-bottom: 2rem; }
 }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="header">
-    <div class="logo"><em>DL</em> Relay</div>
-    <div class="header-right">
+    <div class="logo"><a href="/"><em>DL</em> Relay</a></div>
+    <nav class="header-right">
+      <a class="header-link" href="{{SERVER_URL}}/">Downloads</a>
+      <a class="header-link header-link-active" href="{{SERVER_URL}}/setup">Extension</a>
+      <a class="header-link" href="{{SERVER_URL}}/bookmarklet">Bookmarklet</a>
       <div class="status-badge">
         <span class="status-dot" id="status-dot"></span>
         <span id="status-text">...</span>
       </div>
-      <a class="header-link" href="{{SERVER_URL}}/bookmarklet">Bookmarklet</a>
-      <a class="header-link" href="{{SERVER_URL}}/">Downloads &rarr;</a>
-    </div>
+    </nav>
   </header>
 
   <section class="hero">
