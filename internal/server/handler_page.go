@@ -43,7 +43,7 @@ const pageHTML = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DL Relay</title>
+<title>DL Relay — Extension</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
@@ -62,7 +62,9 @@ const pageHTML = `<!DOCTYPE html>
   --green: #30d880;
   --green-dim: rgba(48, 216, 128, 0.15);
   --red: #e85050;
+  --red-dim: rgba(232, 80, 80, 0.12);
   --blue: #5088f0;
+  --yellow: #f0b030;
 }
 *,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -82,24 +84,17 @@ body::after {
   pointer-events: none;
   z-index: 10000;
 }
-.wrap { max-width: 700px; margin: 0 auto; padding: 0 1.5rem; }
+.wrap { max-width: 960px; margin: 0 auto; padding: 0 1.5rem; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { color: var(--accent-hover); }
-code {
-  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
-  background: var(--surface);
-  padding: 0.1rem 0.35rem;
-  border-radius: 4px;
-  font-size: 0.82em;
-  border: 1px solid var(--border);
-}
+code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
 .header {
   padding: 1.25rem 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 3rem;
+  margin-bottom: 1.5rem;
 }
 .logo {
   font-family: "Syne", system-ui, sans-serif;
@@ -396,8 +391,7 @@ code {
   color: var(--muted);
   font-size: 0.75rem;
   border-top: 1px solid var(--border);
-  margin-top: 0.5rem;
-  animation: fadeUp 0.5s ease-out 0.28s both;
+  margin-top: 1.5rem;
 }
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(14px); }
@@ -414,7 +408,7 @@ code {
   50% { box-shadow: 0 0 10px var(--green), 0 0 18px rgba(48, 216, 128, 0.2); }
 }
 @media (max-width: 600px) {
-  .header { flex-wrap: wrap; gap: 0.5rem; margin-bottom: 2rem; }
+  .header { flex-wrap: wrap; gap: 0.5rem; }
   .header-right { gap: 0.75rem; }
   .hero h1 { font-size: 1.5rem; }
   .flow-connector { flex: 0 0 36px; }
@@ -430,7 +424,7 @@ code {
 <body>
 <div class="wrap">
   <header class="header">
-    <div class="logo"><a href="/"><em>DL</em> Relay</a></div>
+    <div class="logo"><a href="{{SERVER_URL}}/"><em>DL</em> Relay</a></div>
     <nav class="header-right">
       <a class="header-link" href="{{SERVER_URL}}/">Downloads</a>
       <a class="header-link header-link-active" href="{{SERVER_URL}}/setup">Extension</a>

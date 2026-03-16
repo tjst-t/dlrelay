@@ -357,7 +357,7 @@ tr:hover td { background: rgba(232, 152, 48, 0.02); }
 <body>
 <div class="wrap">
   <header class="header">
-    <div class="logo"><a href="/"><em>DL</em> Relay</a></div>
+    <div class="logo"><a href="{{SERVER_URL}}/"><em>DL</em> Relay</a></div>
     <nav class="header-right">
       <a class="header-link header-link-active" href="{{SERVER_URL}}/">Downloads</a>
       <a class="header-link" href="{{SERVER_URL}}/setup">Extension</a>
