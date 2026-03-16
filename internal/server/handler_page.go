@@ -87,7 +87,14 @@ body::after {
 .wrap { max-width: 960px; margin: 0 auto; padding: 0 1.5rem; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { color: var(--accent-hover); }
-code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
+code {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
+  background: var(--surface);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.82em;
+  border: 1px solid var(--border);
+}
 .header {
   padding: 1.25rem 0;
   display: flex;
@@ -106,24 +113,6 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
 .logo a { color: inherit; text-decoration: none; }
 .logo a:hover { color: inherit; }
 .header-right { display: flex; align-items: center; gap: 1.25rem; }
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.78rem;
-  color: var(--muted);
-}
-.status-dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: var(--muted);
-  transition: all 0.4s;
-}
-.status-dot.online {
-  background: var(--green);
-  box-shadow: 0 0 6px var(--green);
-  animation: pulse-dot 2s ease-in-out infinite;
-}
 .header-link {
   font-size: 0.85rem;
   color: var(--text-2);
@@ -132,141 +121,40 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
 }
 .header-link:hover { color: var(--accent); }
 .header-link-active { color: var(--accent); }
-.hero {
-  text-align: center;
-  padding: 1.5rem 0 2.5rem;
-  position: relative;
-  animation: fadeUp 0.5s ease-out;
-}
-.hero::before {
-  content: "";
-  position: absolute;
-  width: 500px; height: 400px;
-  background: radial-gradient(ellipse, var(--accent-dim) 0%, transparent 70%);
-  top: -100px; left: 50%;
-  transform: translateX(-50%);
-  pointer-events: none;
-  z-index: -1;
-}
-.hero h1 {
+.page-title {
   font-family: "Syne", system-ui, sans-serif;
-  font-weight: 800;
-  font-size: 2.1rem;
-  letter-spacing: -0.03em;
-  line-height: 1.35;
-  margin-bottom: 0.9rem;
-}
-.hero-sub {
-  color: var(--text-2);
-  font-size: 0.92rem;
-  max-width: 460px;
-  margin: 0 auto 1.5rem;
-}
-.server-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0.4rem 1rem;
-  font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
-  font-size: 0.82rem;
-  color: var(--text-2);
-}
-.server-chip .dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--green);
-  box-shadow: 0 0 6px var(--green);
-}
-.flow-section {
-  padding: 0.5rem 0 2rem;
-  animation: fadeUp 0.5s ease-out 0.08s both;
-}
-.flow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.flow-node {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 96px;
-}
-.flow-icon {
-  width: 52px; height: 52px;
-  border-radius: 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-2);
-  transition: all 0.3s;
-}
-.flow-node.active .flow-icon {
-  border-color: var(--accent);
-  color: var(--accent);
-  box-shadow: 0 0 24px var(--accent-dim), 0 0 0 1px var(--accent);
-}
-.flow-label {
-  font-size: 0.75rem;
-  color: var(--muted);
-  font-weight: 500;
-}
-.flow-node.active .flow-label { color: var(--accent); }
-.flow-connector {
-  flex: 0 0 72px;
-  height: 2px;
-  background: var(--border);
-  position: relative;
-  overflow: hidden;
-  margin: 0 -2px;
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
   margin-bottom: 1.5rem;
 }
-.flow-signal {
-  position: absolute;
-  width: 14px; height: 2px;
-  background: var(--accent);
-  top: 0; left: -14px;
-  box-shadow: 0 0 8px var(--accent);
-  animation: signal 2.5s ease-in-out infinite;
-}
-.flow-connector:last-of-type .flow-signal {
-  animation-delay: 1.2s;
-}
 .section {
-  padding: 1.75rem 0;
+  padding: 1.25rem 0;
   border-top: 1px solid var(--border);
 }
 .section-title {
   font-family: "Syne", system-ui, sans-serif;
   font-weight: 700;
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   letter-spacing: -0.01em;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
-.section-setup { animation: fadeUp 0.5s ease-out 0.14s both; }
-.section-api { animation: fadeUp 0.5s ease-out 0.20s both; }
 .step {
   display: flex;
   gap: 1rem;
-  margin-bottom: 1.75rem;
+  margin-bottom: 1.5rem;
 }
 .step:last-child { margin-bottom: 0; }
 .step-num {
-  flex: 0 0 30px;
-  width: 30px; height: 30px;
+  flex: 0 0 26px;
+  width: 26px; height: 26px;
   border-radius: 50%;
   background: var(--accent-dim);
   border: 1px solid rgba(232, 152, 48, 0.2);
   color: var(--accent);
   font-family: "Syne", system-ui, sans-serif;
   font-weight: 700;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -274,14 +162,14 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
 }
 .step-body { flex: 1; min-width: 0; }
 .step-body h3 {
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   font-weight: 600;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.2rem;
 }
 .step-body p {
   color: var(--text-2);
   font-size: 0.84rem;
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.5rem;
 }
 .step-body ol {
   list-style: none;
@@ -290,7 +178,7 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
 }
 .step-body ol li {
   counter-increment: sub;
-  padding: 0.25rem 0 0.25rem 1.4rem;
+  padding: 0.2rem 0 0.2rem 1.4rem;
   position: relative;
   font-size: 0.84rem;
   color: var(--text-2);
@@ -308,26 +196,20 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.6rem 1.4rem;
+  padding: 0.5rem 1.2rem;
   background: var(--accent);
   color: var(--bg);
   text-decoration: none;
-  border-radius: 8px;
+  border-radius: 6px;
   font-weight: 600;
-  font-size: 0.88rem;
-  transition: all 0.2s;
-  margin-top: 0.25rem;
+  font-size: 0.84rem;
+  transition: background 0.15s;
 }
-.btn-dl:hover {
-  background: var(--accent-hover);
-  color: var(--bg);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px var(--accent-dim);
-}
-.btn-dl svg { width: 16px; height: 16px; }
-.browser-tabs { display: flex; gap: 0; margin: 0.6rem 0; }
+.btn-dl:hover { background: var(--accent-hover); color: var(--bg); }
+.btn-dl svg { width: 15px; height: 15px; }
+.browser-tabs { display: flex; gap: 0; margin: 0.5rem 0; }
 .browser-tab {
-  padding: 0.3rem 0.8rem;
+  padding: 0.25rem 0.7rem;
   background: var(--surface);
   color: var(--muted);
   border: 1px solid var(--border);
@@ -336,8 +218,8 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
   font-family: inherit;
   transition: all 0.15s;
 }
-.browser-tab:first-child { border-radius: 6px 0 0 6px; }
-.browser-tab:last-child { border-radius: 0 6px 6px 0; border-left: none; }
+.browser-tab:first-child { border-radius: 5px 0 0 5px; }
+.browser-tab:last-child { border-radius: 0 5px 5px 0; border-left: none; }
 .browser-tab.active {
   background: var(--accent-dim);
   color: var(--accent);
@@ -347,7 +229,7 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
 .browser-content.active { display: block; }
 .api-table {
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   overflow: hidden;
   background: var(--surface);
 }
@@ -355,10 +237,9 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.55rem 1rem;
+  padding: 0.45rem 0.85rem;
   border-bottom: 1px solid var(--border);
   font-size: 0.82rem;
-  transition: background 0.1s;
 }
 .api-row:last-child { border-bottom: none; }
 .api-row:hover { background: var(--surface-2); }
@@ -366,10 +247,10 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
   font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
   font-size: 0.68rem;
   font-weight: 700;
-  padding: 0.12rem 0.4rem;
+  padding: 0.1rem 0.35rem;
   border-radius: 4px;
   text-transform: uppercase;
-  flex: 0 0 48px;
+  flex: 0 0 46px;
   text-align: center;
   letter-spacing: 0.02em;
 }
@@ -393,31 +274,11 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
   border-top: 1px solid var(--border);
   margin-top: 1.5rem;
 }
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes signal {
-  0% { left: -14px; opacity: 0; }
-  12% { opacity: 1; }
-  88% { opacity: 1; }
-  100% { left: calc(100% + 14px); opacity: 0; }
-}
-@keyframes pulse-dot {
-  0%, 100% { box-shadow: 0 0 4px var(--green); }
-  50% { box-shadow: 0 0 10px var(--green), 0 0 18px rgba(48, 216, 128, 0.2); }
-}
 @media (max-width: 600px) {
   .header { flex-wrap: wrap; gap: 0.5rem; }
   .header-right { gap: 0.75rem; }
-  .hero h1 { font-size: 1.5rem; }
-  .flow-connector { flex: 0 0 36px; }
-  .flow-node { min-width: 76px; }
-  .flow-icon { width: 44px; height: 44px; border-radius: 11px; }
-  .flow-icon svg { width: 20px; height: 20px; }
   .step { gap: 0.75rem; }
   .api-desc { display: none; }
-  .api-row { padding: 0.45rem 0.7rem; }
 }
 </style>
 </head>
@@ -429,94 +290,52 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
       <a class="header-link" href="{{SERVER_URL}}/">Downloads</a>
       <a class="header-link header-link-active" href="{{SERVER_URL}}/setup">Extension</a>
       <a class="header-link" href="{{SERVER_URL}}/bookmarklet">Bookmarklet</a>
-      <div class="status-badge">
-        <span class="status-dot" id="status-dot"></span>
-        <span id="status-text">...</span>
-      </div>
     </nav>
   </header>
 
-  <section class="hero">
-    <h1>ブラウザの動画を<br>サーバーに直接保存</h1>
-    <p class="hero-sub">拡張機能が動画を自動検出し、このサーバーにダウンロードを指示します。yt-dlp / HLS / HTTP に対応。</p>
-    <div class="server-chip">
-      <span class="dot"></span>
-      <span>{{SERVER_URL}}</span>
+  <h1 class="page-title">拡張機能のセットアップ</h1>
+
+  <section class="section">
+    <h2 class="section-title">1. ダウンロード</h2>
+    <p style="color:var(--text-2);font-size:0.84rem;margin-bottom:0.75rem">サーバー URL (<code>{{SERVER_URL}}</code>) が設定済みの拡張機能をダウンロードできます。</p>
+    <a class="btn-dl" href="{{SERVER_URL}}/api/extension.zip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Extension (.zip)
+    </a>
+  </section>
+
+  <section class="section">
+    <h2 class="section-title">2. インストール</h2>
+    <div class="browser-tabs">
+      <button class="browser-tab active" onclick="switchBrowser('chrome',this)">Chrome / Edge</button>
+      <button class="browser-tab" onclick="switchBrowser('firefox',this)">Firefox</button>
+    </div>
+    <div id="browser-chrome" class="browser-content active">
+      <ol>
+        <li>ダウンロードした zip を展開する</li>
+        <li><code>chrome://extensions</code> を開き「デベロッパー モード」をON</li>
+        <li>「パッケージ化されていない拡張機能を読み込む」で展開フォルダを選択</li>
+      </ol>
+    </div>
+    <div id="browser-firefox" class="browser-content">
+      <ol>
+        <li><code>about:debugging#/runtime/this-firefox</code> を開く</li>
+        <li>「一時的なアドオンを読み込む」で zip 内の <code>manifest.json</code> を選択</li>
+      </ol>
     </div>
   </section>
 
-  <section class="flow-section">
-    <div class="flow">
-      <div class="flow-node">
-        <div class="flow-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-        </div>
-        <span class="flow-label">ブラウザ</span>
-      </div>
-      <div class="flow-connector"><div class="flow-signal"></div></div>
-      <div class="flow-node">
-        <div class="flow-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-        </div>
-        <span class="flow-label">拡張機能</span>
-      </div>
-      <div class="flow-connector"><div class="flow-signal"></div></div>
-      <div class="flow-node active">
-        <div class="flow-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </div>
-        <span class="flow-label">Relay Server</span>
-      </div>
-    </div>
+  <section class="section">
+    <h2 class="section-title">3. 使い方</h2>
+    <ol>
+      <li style="color:var(--text-2);font-size:0.84rem;padding:0.2rem 0 0.2rem 1.4rem;position:relative;counter-increment:sub;line-height:1.55">動画のあるページを開く（拡張がバッジに検出数を表示）</li>
+      <li style="color:var(--text-2);font-size:0.84rem;padding:0.2rem 0 0.2rem 1.4rem;position:relative;counter-increment:sub;line-height:1.55">ツールバーのアイコンをクリックし、検出された動画を選択</li>
+      <li style="color:var(--text-2);font-size:0.84rem;padding:0.2rem 0 0.2rem 1.4rem;position:relative;counter-increment:sub;line-height:1.55">「Download」ボタンでサーバーへダウンロード開始</li>
+    </ol>
   </section>
 
-  <section class="section section-setup">
-    <h2 class="section-title">セットアップ</h2>
-    <div class="step">
-      <div class="step-num">1</div>
-      <div class="step-body">
-        <h3>拡張機能をダウンロード</h3>
-        <p>サーバー URL は設定済みの状態で含まれています</p>
-        <a class="btn-dl" href="{{SERVER_URL}}/api/extension.zip">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Extension (.zip)
-        </a>
-      </div>
-    </div>
-    <div class="step">
-      <div class="step-num">2</div>
-      <div class="step-body">
-        <h3>ブラウザにインストール</h3>
-        <div class="browser-tabs">
-          <button class="browser-tab active" onclick="switchBrowser('chrome',this)">Chrome / Edge</button>
-          <button class="browser-tab" onclick="switchBrowser('firefox',this)">Firefox</button>
-        </div>
-        <div id="browser-chrome" class="browser-content active">
-          <ol>
-            <li>ダウンロードした zip を展開する</li>
-            <li><code>chrome://extensions</code> を開き「デベロッパー モード」をON</li>
-            <li>「パッケージ化されていない拡張機能を読み込む」で展開フォルダを選択</li>
-          </ol>
-        </div>
-        <div id="browser-firefox" class="browser-content">
-          <ol>
-            <li><code>about:debugging#/runtime/this-firefox</code> を開く</li>
-            <li>「一時的なアドオンを読み込む」で zip 内の <code>manifest.json</code> を選択</li>
-          </ol>
-        </div>
-      </div>
-    </div>
-    <div class="step">
-      <div class="step-num">3</div>
-      <div class="step-body">
-        <h3>動画をダウンロード</h3>
-        <p>動画ページでツールバーのアイコンをクリックし、検出された動画を選んでダウンロード</p>
-      </div>
-    </div>
-  </section>
-
-  <section class="section section-api">
-    <h2 class="section-title">API</h2>
+  <section class="section">
+    <h2 class="section-title">API エンドポイント</h2>
     <div class="api-table">
       <div class="api-row">
         <span class="method method-get">GET</span>
@@ -577,14 +396,6 @@ function switchBrowser(id, el) {
   document.getElementById("browser-" + id).classList.add("active");
   el.classList.add("active");
 }
-(function() {
-  var dot = document.getElementById("status-dot");
-  var txt = document.getElementById("status-text");
-  fetch("{{SERVER_URL}}/api/health").then(function(r) {
-    if (r.ok) { dot.classList.add("online"); txt.textContent = "Online"; }
-    else { txt.textContent = "Error"; }
-  }).catch(function() { txt.textContent = "Offline"; });
-})();
 </script>
 </body>
 </html>`

@@ -73,7 +73,14 @@ body::after {
 .wrap { max-width: 960px; margin: 0 auto; padding: 0 1.5rem; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { color: var(--accent-hover); }
-code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
+code {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
+  background: var(--surface);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.82em;
+  border: 1px solid var(--border);
+}
 .header {
   padding: 1.25rem 0;
   display: flex;
@@ -100,122 +107,64 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
 }
 .header-link:hover { color: var(--accent); }
 .header-link-active { color: var(--accent); }
-.hero {
-  text-align: center;
-  padding: 1rem 0 2.5rem;
-  position: relative;
-  animation: fadeUp 0.5s ease-out;
-}
-.hero::before {
-  content: "";
-  position: absolute;
-  width: 500px; height: 400px;
-  background: radial-gradient(ellipse, var(--accent-dim) 0%, transparent 70%);
-  top: -100px; left: 50%;
-  transform: translateX(-50%);
-  pointer-events: none;
-  z-index: -1;
-}
-.hero h1 {
+.page-title {
   font-family: "Syne", system-ui, sans-serif;
-  font-weight: 800;
-  font-size: 2.1rem;
-  letter-spacing: -0.03em;
-  line-height: 1.35;
-  margin-bottom: 0.9rem;
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.5rem;
 }
-.hero-sub {
+.page-desc {
   color: var(--text-2);
-  font-size: 0.92rem;
-  max-width: 460px;
-  margin: 0 auto;
+  font-size: 0.84rem;
+  margin-bottom: 1.5rem;
 }
 .section {
-  padding: 1.75rem 0;
+  padding: 1.25rem 0;
   border-top: 1px solid var(--border);
 }
 .section-title {
   font-family: "Syne", system-ui, sans-serif;
   font-weight: 700;
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   letter-spacing: -0.01em;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
-.section-bm { animation: fadeUp 0.5s ease-out 0.08s both; }
-.section-setup { animation: fadeUp 0.5s ease-out 0.14s both; }
-.section-features { animation: fadeUp 0.5s ease-out 0.20s both; }
-.bm-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 1.5rem;
-  position: relative;
-  overflow: hidden;
-}
-.bm-card::before {
-  content: "";
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-}
-.bm-methods {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  margin-top: 1.25rem;
-}
-.bm-method {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1rem;
-  transition: all 0.2s;
-}
-.bm-method:hover {
-  border-color: rgba(232, 152, 48, 0.3);
-}
-.bm-method-label {
-  font-size: 0.72rem;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 0.6rem;
-  font-weight: 600;
+.bm-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
 }
 .bm-link {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.6rem 1.4rem;
+  padding: 0.5rem 1.2rem;
   background: var(--accent);
   color: var(--bg);
   text-decoration: none;
-  border-radius: 8px;
+  border-radius: 6px;
   font-weight: 600;
-  font-size: 0.88rem;
-  transition: all 0.2s;
+  font-size: 0.84rem;
+  transition: background 0.15s;
 }
-.bm-link:hover {
-  background: var(--accent-hover);
-  color: var(--bg);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px var(--accent-dim);
-}
-.bm-link svg { width: 16px; height: 16px; }
+.bm-link:hover { background: var(--accent-hover); color: var(--bg); }
+.bm-link svg { width: 15px; height: 15px; }
 .copy-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  background: var(--surface-2);
+  background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text-2);
-  padding: 0.5rem 1rem;
+  padding: 0.45rem 0.9rem;
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.82rem;
   font-family: inherit;
-  transition: all 0.2s;
+  transition: all 0.15s;
 }
 .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
 .copy-btn.copied { border-color: var(--green); color: var(--green); background: var(--green-dim); }
@@ -224,82 +173,53 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 0.75rem 1rem;
+  padding: 0.6rem 0.85rem;
   overflow-x: auto;
   font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   line-height: 1.4;
   word-break: break-all;
   white-space: pre-wrap;
-  margin-top: 0.75rem;
-  max-height: 100px;
+  max-height: 80px;
   overflow-y: auto;
   color: var(--muted);
 }
-.step {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1.75rem;
+.note {
+  background: var(--surface);
+  border: 1px solid rgba(232, 152, 48, 0.25);
+  border-radius: 6px;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-top: 0.75rem;
 }
-.step:last-child { margin-bottom: 0; }
-.step-num {
-  flex: 0 0 30px;
-  width: 30px; height: 30px;
+.note strong { display: block; margin-bottom: 0.2rem; }
+.note span { color: var(--text-2); }
+.step-list { list-style: none; counter-reset: step; padding: 0; }
+.step-list li {
+  counter-increment: step;
+  padding: 0.35rem 0 0.35rem 2rem;
+  position: relative;
+  font-size: 0.84rem;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.step-list li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  width: 22px; height: 22px;
   border-radius: 50%;
   background: var(--accent-dim);
   border: 1px solid rgba(232, 152, 48, 0.2);
   color: var(--accent);
   font-family: "Syne", system-ui, sans-serif;
   font-weight: 700;
-  font-size: 0.82rem;
+  font-size: 0.72rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 0.1rem;
-}
-.step-body { flex: 1; min-width: 0; }
-.step-body h3 {
-  font-size: 0.92rem;
-  font-weight: 600;
-  margin-bottom: 0.25rem;
-}
-.step-body p {
-  color: var(--text-2);
-  font-size: 0.84rem;
-}
-.feature-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-}
-.feature-item {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1rem;
-  transition: background 0.15s;
-}
-.feature-item:hover { background: var(--surface-2); }
-.feature-icon {
-  width: 32px; height: 32px;
-  border-radius: 8px;
-  background: var(--accent-dim);
-  border: 1px solid rgba(232, 152, 48, 0.15);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--accent);
-  margin-bottom: 0.6rem;
-}
-.feature-icon svg { width: 16px; height: 16px; }
-.feature-name {
-  font-size: 0.84rem;
-  font-weight: 600;
-  margin-bottom: 0.2rem;
-}
-.feature-desc {
-  font-size: 0.76rem;
-  color: var(--muted);
+  top: 0.35rem;
 }
 .footer {
   padding: 2rem 0;
@@ -309,17 +229,9 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
   border-top: 1px solid var(--border);
   margin-top: 1.5rem;
 }
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 @media (max-width: 600px) {
   .header { flex-wrap: wrap; gap: 0.5rem; }
   .header-right { gap: 0.75rem; }
-  .hero h1 { font-size: 1.5rem; }
-  .bm-methods { grid-template-columns: 1fr; }
-  .feature-grid { grid-template-columns: 1fr; }
-  .step { gap: 0.75rem; }
 }
 </style>
 </head>
@@ -334,98 +246,36 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
     </nav>
   </header>
 
-  <section class="hero">
-    <h1>モバイルでも<br>動画をダウンロード</h1>
-    <p class="hero-sub">ブックマークレットを使えば、拡張機能が使えないモバイルブラウザからでも動画をサーバーに保存できます。</p>
-  </section>
+  <h1 class="page-title">ブックマークレットの設定</h1>
+  <p class="page-desc">拡張機能が使えない環境（モバイルブラウザ等）向けのブックマークレットです。yt-dlp / DOM検出 / HLS / DASH に対応。</p>
 
-  <section class="section section-bm">
-    <h2 class="section-title">ブックマークレット</h2>
-    <div class="bm-card">
-      <p style="color:var(--text-2);font-size:0.84rem;margin-bottom:0.5rem">ブックマークに登録して、動画のあるページで実行するとダウンロードを開始します。</p>
-      <div class="bm-methods">
-        <div class="bm-method">
-          <div class="bm-method-label">方法1: ドラッグ</div>
-          <p style="color:var(--text-2);font-size:0.8rem;margin-bottom:0.75rem">ブックマークバーにドラッグ（<code style="border:none;background:none;padding:0;font-size:inherit">javascript:</code> が保持される）</p>
-          <a class="bm-link" href="javascript:void(0)" id="bookmarklet-link" onclick="event.preventDefault();alert('このリンクをブックマークバーにドラッグ&ドロップしてください。\nまたは右の Copy ボタンでコードをコピーして、ブックマークのURLに貼り付けてください。')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
-            DL Relay
-          </a>
-        </div>
-        <div class="bm-method">
-          <div class="bm-method-label">方法2: コピー</div>
-          <p style="color:var(--text-2);font-size:0.8rem;margin-bottom:0.75rem">コードをコピーしてブックマークURLに貼り付け</p>
-          <button class="copy-btn" id="copy-btn" onclick="copyCode()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-            Copy to clipboard
-          </button>
-        </div>
-      </div>
-      <div class="code-block" id="code-display"></div>
+  <section class="section">
+    <h2 class="section-title">ブックマークレットの登録</h2>
+    <p style="color:var(--text-2);font-size:0.84rem;margin-bottom:0.75rem">下のリンクをブックマークバーにドラッグするか、コードをコピーしてブックマークの URL に貼り付けてください。</p>
+    <div class="bm-actions">
+      <a class="bm-link" href="javascript:void(0)" id="bookmarklet-link" onclick="event.preventDefault();alert('このリンクをブックマークバーにドラッグ&ドロップしてください。')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+        DL Relay
+      </a>
+      <button class="copy-btn" id="copy-btn" onclick="copyCode()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        Copy to clipboard
+      </button>
+    </div>
+    <div class="code-block" id="code-display"></div>
+    <div class="note">
+      <strong>注意: <code style="border:none;background:none;padding:0;font-size:inherit">javascript:</code> が消える場合</strong>
+      <span>Chromium系ブラウザ（Chrome, Edge, Vivaldi）はペースト時に <code style="border:none;background:none;padding:0;font-size:inherit">javascript:</code> を削除します。貼り付け後、先頭に手入力で追加してください。</span>
     </div>
   </section>
 
-  <section class="section section-setup">
-    <h2 class="section-title">設定手順</h2>
-    <div class="step">
-      <div class="step-num">1</div>
-      <div class="step-body">
-        <h3>ブックマークを追加</h3>
-        <p>まず適当なページをブックマークに追加する（またはブックマークマネージャで新規作成）</p>
-      </div>
-    </div>
-    <div class="step">
-      <div class="step-num">2</div>
-      <div class="step-body">
-        <h3>URLを置き換え</h3>
-        <p>ブックマークを編集し、URL欄に上でコピーしたコードを貼り付ける</p>
-        <div style="background:var(--surface);border:1px solid rgba(232,152,48,0.25);border-radius:6px;padding:0.7rem 0.9rem;margin-top:0.6rem;font-size:0.8rem;color:var(--accent)">
-          <strong style="display:block;margin-bottom:0.3rem">注意: <code style="border:none;background:none;padding:0;font-size:inherit">javascript:</code> が消える場合</strong>
-          <span style="color:var(--text-2)">Chromium系ブラウザ（Vivaldi, Chrome, Edge）はセキュリティ上の理由でペースト時に <code style="border:none;background:none;padding:0;font-size:inherit">javascript:</code> を削除します。貼り付けた後、先頭に <code style="border:none;background:none;padding:0;font-size:inherit">javascript:</code> を手入力で追加してください。</span>
-        </div>
-      </div>
-    </div>
-    <div class="step">
-      <div class="step-num">3</div>
-      <div class="step-body">
-        <h3>動画をダウンロード</h3>
-        <p>動画のあるページでブックマークをクリック/タップして実行</p>
-      </div>
-    </div>
-  </section>
-
-  <section class="section section-features">
-    <h2 class="section-title">対応機能</h2>
-    <div class="feature-grid">
-      <div class="feature-item">
-        <div class="feature-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </div>
-        <div class="feature-name">yt-dlp</div>
-        <div class="feature-desc">YouTube, X, Instagram, TikTok, ニコニコ動画など多数のサイトに対応</div>
-      </div>
-      <div class="feature-item">
-        <div class="feature-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-        </div>
-        <div class="feature-name">DOM 検出</div>
-        <div class="feature-desc">&lt;video&gt; / &lt;source&gt; タグから動画URLを自動検出</div>
-      </div>
-      <div class="feature-item">
-        <div class="feature-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-        </div>
-        <div class="feature-name">HLS / DASH</div>
-        <div class="feature-desc">.m3u8 / .mpd ストリーミングURLを検出してダウンロード</div>
-      </div>
-      <div class="feature-item">
-        <div class="feature-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-        </div>
-        <div class="feature-name">複数選択</div>
-        <div class="feature-desc">検出した動画を一覧から選んでダウンロード</div>
-      </div>
-    </div>
+  <section class="section">
+    <h2 class="section-title">手動で登録する手順</h2>
+    <ol class="step-list">
+      <li>適当なページをブックマークに追加する（またはブックマークマネージャで新規作成）</li>
+      <li>ブックマークを編集し、URL 欄に上でコピーしたコードを貼り付ける</li>
+      <li>動画のあるページでブックマークをクリック / タップして実行</li>
+    </ol>
   </section>
 
   <footer class="footer">dlrelay {{VERSION}}</footer>
