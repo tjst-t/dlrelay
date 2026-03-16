@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/tjst-t/dlrelay/internal/version"
 )
 
 func serverURL(r *http.Request) string {
@@ -29,8 +31,10 @@ func safeServerURL(r *http.Request) string {
 
 func (s *Server) handlePage(w http.ResponseWriter, r *http.Request) {
 	base := safeServerURL(r)
+	html := strings.ReplaceAll(pageHTML, "{{SERVER_URL}}", base)
+	html = strings.ReplaceAll(html, "{{VERSION}}", version.Version)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(strings.ReplaceAll(pageHTML, "{{SERVER_URL}}", base)))
+	w.Write([]byte(html))
 }
 
 
@@ -568,7 +572,7 @@ code {
     </div>
   </section>
 
-  <footer class="footer">dlrelay v2.0.0</footer>
+  <footer class="footer">dlrelay {{VERSION}}</footer>
 </div>
 <script>
 function switchBrowser(id, el) {

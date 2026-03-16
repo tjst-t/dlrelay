@@ -16,6 +16,7 @@ import (
 	"github.com/tjst-t/dlrelay/internal/convert"
 	"github.com/tjst-t/dlrelay/internal/download"
 	"github.com/tjst-t/dlrelay/internal/model"
+	"github.com/tjst-t/dlrelay/internal/version"
 )
 
 // Server is the dlrelay HTTP API server.
@@ -148,7 +149,7 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 
 // handleHealth returns server health status.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": version.Version})
 }
 
 // handleCreateDownload creates a new download task.

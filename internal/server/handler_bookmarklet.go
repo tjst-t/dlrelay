@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/tjst-t/dlrelay/internal/version"
 )
 
 // safeAPIKey returns the API key safely escaped for embedding in JS strings.
@@ -17,6 +19,7 @@ func (s *Server) handleBookmarkletPage(w http.ResponseWriter, r *http.Request) {
 	key := safeAPIKey(s.apiKey)
 	html := strings.ReplaceAll(bookmarkletHTML, "{{SERVER_URL}}", base)
 	html = strings.ReplaceAll(html, "{{API_KEY}}", key)
+	html = strings.ReplaceAll(html, "{{VERSION}}", version.Version)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(html))
 }
@@ -431,7 +434,7 @@ code {
     </div>
   </section>
 
-  <footer class="footer">dlrelay v2.0.0</footer>
+  <footer class="footer">dlrelay {{VERSION}}</footer>
 </div>
 
 <script>

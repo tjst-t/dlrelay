@@ -8,7 +8,7 @@ LOG_FILE := /tmp/dlrelay-server-dev.log
 PORTMAN_ENV := /tmp/dlrelay-server-portman.env
 
 build-server:
-	go build -ldflags="-s -w" -o bin/dlrelay-server ./cmd/server
+	go build -ldflags="-s -w -X github.com/tjst-t/dlrelay/internal/version.Version=$(VERSION)" -o bin/dlrelay-server ./cmd/server
 
 serve: build-server
 	@if [ -f $(PID_FILE) ]; then \

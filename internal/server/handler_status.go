@@ -3,12 +3,16 @@ package server
 import (
 	"net/http"
 	"strings"
+
+	"github.com/tjst-t/dlrelay/internal/version"
 )
 
 func (s *Server) handleStatusPage(w http.ResponseWriter, r *http.Request) {
 	base := safeServerURL(r)
+	html := strings.ReplaceAll(statusHTML, "{{SERVER_URL}}", base)
+	html = strings.ReplaceAll(html, "{{VERSION}}", version.Version)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(strings.ReplaceAll(statusHTML, "{{SERVER_URL}}", base)))
+	w.Write([]byte(html))
 }
 
 const statusHTML = `<!DOCTYPE html>
@@ -331,6 +335,14 @@ tr:hover td { background: rgba(232, 152, 48, 0.02); }
 }
 .card-row .progress-bar { flex: 1; }
 .card-actions { margin-top: 0.5rem; display: flex; gap: 0.4rem; }
+.footer {
+  padding: 2rem 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.75rem;
+  border-top: 1px solid var(--border);
+  margin-top: 1.5rem;
+}
 @media (max-width: 700px) {
   .header { flex-wrap: wrap; gap: 0.5rem; }
   .header-right { gap: 0.75rem; }
@@ -364,6 +376,8 @@ tr:hover td { background: rgba(232, 152, 48, 0.02); }
   <div id="content">
     <div class="empty"><div class="empty-icon">&#9744;</div>No downloads yet</div>
   </div>
+
+  <footer class="footer">dlrelay {{VERSION}}</footer>
 </div>
 
 <div class="modal-overlay" id="preview-modal" onclick="closePreview(event)">

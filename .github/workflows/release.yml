@@ -10,6 +10,65 @@ permissions:
   packages: write
 
 jobs:
+  binaries:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          OUTNAME="dlrelay-server-${GOOS}-${GOARCH}"
+          go build -ldflags="-s -w -X github.com/tjst-t/dlrelay/internal/version.Version=${VERSION}" \
+            -o "bin/${OUTNAME}" ./cmd/server
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dlrelay-server-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: bin/dlrelay-server-*
+
+  release:
+    needs: binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Package extension
+        run: cd extension && zip -r ../artifacts/dlrelay-extension.zip . -x "*.svg" ".*"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          gh release create "${VERSION}" artifacts/* \
+            --title "${VERSION}" \
+            --generate-notes
+
   docker:
     runs-on: ubuntu-latest
     steps:
@@ -34,6 +93,8 @@ jobs:
         with:
           context: .
           push: true
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
           tags: |
             ghcr.io/tjst-t/dlrelay-server:${{ steps.version.outputs.version }}
             ghcr.io/tjst-t/dlrelay-server:latest
