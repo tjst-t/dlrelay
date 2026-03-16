@@ -46,6 +46,18 @@
 
 ### 1. サーバー起動
 
+**GHCR のビルド済みイメージを使う場合（推奨）:**
+
+```bash
+docker run -d \
+  -p 8090:8090 \
+  -v /tank/downloads:/downloads \
+  -e MAX_CONCURRENT=3 \
+  ghcr.io/tjst-t/dlrelay-server:latest
+```
+
+**自分でビルドする場合:**
+
 ```bash
 # Docker
 docker build -t dlrelay-server .
@@ -180,7 +192,7 @@ docker run -d \
   -v /tank/downloads/youtube:/downloads/youtube \
   -e DOWNLOAD_RULES="youtube.com:/downloads/youtube" \
   -e MAX_CONCURRENT=3 \
-  dlrelay-server
+  ghcr.io/tjst-t/dlrelay-server:latest
 ```
 
 ### 重複スキップ (`CHECK_DIRS`)
@@ -261,6 +273,63 @@ GET    /api/extension.zip          拡張機能（サーバーURL設定済み）
 POST   /api/probe                  ffprobe実行
 GET    /api/codecs                 利用可能コーデック一覧
 GET    /api/formats                利用可能フォーマット一覧
+```
+
+## Docker
+
+### ビルド済みイメージ
+
+GitHub Container Registry でマルチアーキテクチャ（linux/amd64, linux/arm64）のイメージを公開している。
+
+```bash
+# 最新版
+docker pull ghcr.io/tjst-t/dlrelay-server:latest
+
+# バージョン指定
+docker pull ghcr.io/tjst-t/dlrelay-server:v0.5.1
+```
+
+### docker compose の例
+
+```yaml
+services:
+  dlrelay:
+    image: ghcr.io/tjst-t/dlrelay-server:latest
+    ports:
+      - "8090:8090"
+    volumes:
+      - /tank/downloads:/downloads
+      - ./config.toml:/etc/dlrelay/config.toml:ro
+    environment:
+      - MAX_CONCURRENT=3
+    restart: unless-stopped
+```
+
+### イメージの内容
+
+- ベース: `alpine:3.21`
+- 含まれるツール: `ffmpeg`, `ffprobe`, `ca-certificates`
+- **含まれないツール**: `yt-dlp`, `Node.js`, `curl_cffi`（yt-dlp を使う場合は別途インストールが必要）
+
+yt-dlp を含めたカスタムイメージの例:
+
+```dockerfile
+FROM ghcr.io/tjst-t/dlrelay-server:latest
+RUN apk add --no-cache python3 py3-pip nodejs && \
+    pip3 install --break-system-packages yt-dlp curl_cffi
+```
+
+## リリース
+
+タグ (`v*`) を push すると GitHub Actions が自動的にリリースを作成する。
+
+- **バイナリ**: linux/darwin x amd64/arm64 の4種 + extension.zip
+- **Docker**: `ghcr.io/tjst-t/dlrelay-server:{tag}` と `:latest`
+- **バージョン**: git tag がバイナリと WebUI に埋め込まれる
+
+```bash
+git tag v0.6.0
+git push origin v0.6.0
 ```
 
 ## ビルド
