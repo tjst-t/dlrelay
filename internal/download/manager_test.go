@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -19,7 +21,7 @@ func TestManagerSubmitAndGet(t *testing.T) {
 	}))
 	defer fileServer.Close()
 
-	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil)
+	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil, nil)
 
 	id, err := mgr.Submit(model.DownloadRequest{
 		URL:      fileServer.URL + "/test.txt",
@@ -51,7 +53,7 @@ func TestManagerSubmitAndGet(t *testing.T) {
 }
 
 func TestManagerList(t *testing.T) {
-	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil)
+	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil, nil)
 
 	list := mgr.List()
 	if list != nil && len(list) != 0 {
@@ -60,7 +62,7 @@ func TestManagerList(t *testing.T) {
 }
 
 func TestManagerGetNotFound(t *testing.T) {
-	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil)
+	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil, nil)
 
 	_, err := mgr.Get("nonexistent")
 	if err == nil {
@@ -83,7 +85,7 @@ func TestManagerCancel(t *testing.T) {
 	}))
 	defer slowServer.Close()
 
-	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil)
+	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil, nil)
 
 	id, err := mgr.Submit(model.DownloadRequest{
 		URL:      slowServer.URL + "/slow.bin",
@@ -110,7 +112,7 @@ func TestManagerCancel(t *testing.T) {
 }
 
 func TestManagerDelete(t *testing.T) {
-	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil)
+	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil, nil)
 
 	err := mgr.Delete("nonexistent")
 	if err == nil {
@@ -125,7 +127,7 @@ func TestPathTraversal(t *testing.T) {
 	defer fileServer.Close()
 
 	downloadDir := t.TempDir()
-	mgr := download.NewManager(downloadDir, t.TempDir(), 3, nil)
+	mgr := download.NewManager(downloadDir, t.TempDir(), 3, nil, nil)
 
 	// Try to escape download directory via Directory field
 	id, err := mgr.Submit(model.DownloadRequest{
@@ -160,7 +162,7 @@ func TestFilenameSanitization(t *testing.T) {
 	defer fileServer.Close()
 
 	downloadDir := t.TempDir()
-	mgr := download.NewManager(downloadDir, t.TempDir(), 3, nil)
+	mgr := download.NewManager(downloadDir, t.TempDir(), 3, nil, nil)
 
 	// Try path traversal via filename
 	id, err := mgr.Submit(model.DownloadRequest{
@@ -187,6 +189,155 @@ func TestFilenameSanitization(t *testing.T) {
 	}
 }
 
+func TestSkipIfExists(t *testing.T) {
+	fileServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		content := "test content"
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(content)))
+		w.Write([]byte(content))
+	}))
+	defer fileServer.Close()
+
+	downloadDir := t.TempDir()
+	checkDir := t.TempDir()
+
+	// Create an existing file in the check directory (different extension)
+	os.MkdirAll(filepath.Join(checkDir, "sub"), 0o755)
+	os.WriteFile(filepath.Join(checkDir, "sub", "test.mkv"), []byte("existing"), 0o644)
+
+	mgr := download.NewManager(downloadDir, t.TempDir(), 3, nil, []string{checkDir})
+
+	id, err := mgr.Submit(model.DownloadRequest{
+		URL:      fileServer.URL + "/test.txt",
+		Filename: "test.mp4",
+	})
+	if err != nil {
+		t.Fatalf("Submit failed: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		status, _ := mgr.Get(id)
+		if status.State == model.StateSkipped || status.State == model.StateCompleted || status.State == model.StateFailed {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	status, err := mgr.Get(id)
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if status.State != model.StateSkipped {
+		t.Fatalf("expected skipped, got %s", status.State)
+	}
+	if status.SkipInfo == "" {
+		t.Fatal("expected skip_info to be set")
+	}
+	if status.Filename != "test.mkv" {
+		t.Errorf("expected filename 'test.mkv', got %q", status.Filename)
+	}
+	if !status.HasFile {
+		t.Error("expected has_file to be true")
+	}
+}
+
+func TestSkipIfExistsRetryForceDownloads(t *testing.T) {
+	fileServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		content := "test content"
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(content)))
+		w.Write([]byte(content))
+	}))
+	defer fileServer.Close()
+
+	downloadDir := t.TempDir()
+
+	// Create existing file in download dir
+	os.WriteFile(filepath.Join(downloadDir, "test.mp4"), []byte("existing"), 0o644)
+
+	mgr := download.NewManager(downloadDir, t.TempDir(), 3, nil, nil)
+
+	id, err := mgr.Submit(model.DownloadRequest{
+		URL:      fileServer.URL + "/test.txt",
+		Filename: "test.mp4",
+	})
+	if err != nil {
+		t.Fatalf("Submit failed: %v", err)
+	}
+
+	// Wait for skip
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		status, _ := mgr.Get(id)
+		if status.State == model.StateSkipped {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	status, _ := mgr.Get(id)
+	if status.State != model.StateSkipped {
+		t.Fatalf("expected skipped, got %s", status.State)
+	}
+
+	// Retry should force download
+	if err := mgr.Retry(id); err != nil {
+		t.Fatalf("Retry failed: %v", err)
+	}
+
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		status, _ = mgr.Get(id)
+		if status.State == model.StateCompleted || status.State == model.StateFailed {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	status, _ = mgr.Get(id)
+	if status.State != model.StateCompleted {
+		t.Fatalf("expected completed after retry, got %s (error: %v)", status.State, status.Error)
+	}
+}
+
+func TestNoSkipWhenNoMatch(t *testing.T) {
+	fileServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		content := "test content"
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(content)))
+		w.Write([]byte(content))
+	}))
+	defer fileServer.Close()
+
+	downloadDir := t.TempDir()
+	checkDir := t.TempDir()
+
+	// Create a file with a different name
+	os.WriteFile(filepath.Join(checkDir, "other.mp4"), []byte("existing"), 0o644)
+
+	mgr := download.NewManager(downloadDir, t.TempDir(), 3, nil, []string{checkDir})
+
+	id, err := mgr.Submit(model.DownloadRequest{
+		URL:      fileServer.URL + "/test.txt",
+		Filename: "unique_video.mp4",
+	})
+	if err != nil {
+		t.Fatalf("Submit failed: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		status, _ := mgr.Get(id)
+		if status.State == model.StateCompleted || status.State == model.StateFailed || status.State == model.StateSkipped {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	status, _ := mgr.Get(id)
+	if status.State != model.StateCompleted {
+		t.Fatalf("expected completed (no match to skip), got %s", status.State)
+	}
+}
+
 func TestManagerConcurrencyLimit(t *testing.T) {
 	// Server that blocks until context is cancelled
 	slowServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +346,7 @@ func TestManagerConcurrencyLimit(t *testing.T) {
 	defer slowServer.Close()
 
 	maxConcurrent := 2
-	mgr := download.NewManager(t.TempDir(), t.TempDir(), maxConcurrent, nil)
+	mgr := download.NewManager(t.TempDir(), t.TempDir(), maxConcurrent, nil, nil)
 
 	// Submit more tasks than maxConcurrent
 	var ids []string

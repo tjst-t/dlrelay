@@ -9,17 +9,19 @@ import (
 
 // Task represents a single download task.
 type Task struct {
-	mu       sync.RWMutex
-	id       string
-	url      string
-	req      model.DownloadRequest
-	state    model.DownloadState
-	bytes    int64
-	total    int64
-	err      string
-	filePath string
-	cancel   context.CancelFunc
-	onChange func()
+	mu            sync.RWMutex
+	id            string
+	url           string
+	req           model.DownloadRequest
+	state         model.DownloadState
+	bytes         int64
+	total         int64
+	err           string
+	filePath      string
+	skipInfo      string
+	forceDownload bool
+	cancel        context.CancelFunc
+	onChange      func()
 }
 
 // NewTask creates a new download task.
@@ -98,6 +100,13 @@ func (t *Task) Cancel() {
 	}
 }
 
+// SetSkipInfo sets the path of the existing file that caused this download to be skipped.
+func (t *Task) SetSkipInfo(info string) {
+	t.mu.Lock()
+	t.skipInfo = info
+	t.mu.Unlock()
+}
+
 // Status returns the current status of the task.
 func (t *Task) Status() model.DownloadStatus {
 	t.mu.RLock()
@@ -117,5 +126,6 @@ func (t *Task) Status() model.DownloadStatus {
 		HasFile:       t.filePath != "",
 		FilePath:      t.filePath,
 		Error:         errPtr,
+		SkipInfo:      t.skipInfo,
 	}
 }

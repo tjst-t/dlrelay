@@ -17,6 +17,7 @@ type Record struct {
 	State    model.DownloadState   `json:"state"`
 	FilePath string                `json:"file_path,omitempty"`
 	Error    string                `json:"error,omitempty"`
+	SkipInfo string                `json:"skip_info,omitempty"`
 	Bytes    int64                 `json:"bytes_received"`
 	Total    int64                 `json:"total_bytes"`
 }

@@ -28,7 +28,7 @@ func main() {
 		}
 	}
 
-	dlMgr := download.NewManager(cfg.DownloadDir, cfg.TempDir, cfg.MaxConcurrent, cfg.DownloadRules)
+	dlMgr := download.NewManager(cfg.DownloadDir, cfg.TempDir, cfg.MaxConcurrent, cfg.DownloadRules, cfg.CheckDirs)
 	convMgr := convert.NewManager()
 
 	var opts []server.Option

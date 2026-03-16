@@ -201,7 +201,7 @@ func (s *Server) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
-	if status.State != "completed" || status.FilePath == "" {
+	if (status.State != model.StateCompleted && status.State != model.StateSkipped) || status.FilePath == "" {
 		writeError(w, http.StatusNotFound, "file not available")
 		return
 	}

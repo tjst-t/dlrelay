@@ -22,6 +22,7 @@ const (
 	StateCompleted   DownloadState = "completed"
 	StateFailed      DownloadState = "failed"
 	StateCancelled   DownloadState = "cancelled"
+	StateSkipped     DownloadState = "skipped"
 )
 
 // DownloadStatus is the response body for GET /api/downloads/:id.
@@ -36,4 +37,5 @@ type DownloadStatus struct {
 	HasFile       bool          `json:"has_file,omitempty"`
 	FilePath      string        `json:"-"`
 	Error         *string       `json:"error"`
+	SkipInfo      string        `json:"skip_info,omitempty"`
 }

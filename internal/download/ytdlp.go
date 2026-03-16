@@ -31,6 +31,79 @@ var validQuality = regexp.MustCompile(`^[a-zA-Z0-9+/\[\]:,\-*><=. ]+$`)
 // [Merger] Merging formats into "/path/to/video.mp4"
 var filenameRe = regexp.MustCompile(`(?:Destination:\s*|Merging formats into "?)([^"\n]+)`)
 
+// YtdlpFilename uses yt-dlp --print filename to determine the output filename
+// without actually downloading. Returns the base filename (e.g. "video.mp4").
+func YtdlpFilename(ctx context.Context, req model.DownloadRequest) (string, error) {
+	args := []string{
+		"--no-playlist",
+		"--print", "filename",
+		"--merge-output-format", "mp4",
+		"--js-runtimes", "node",
+	}
+
+	// Use same output template logic as YtdlpDownload
+	outTemplate := "%(title)s.%(ext)s"
+	if req.Filename != "" {
+		baseName := filepath.Base(req.Filename)
+		ext := filepath.Ext(baseName)
+		name := strings.TrimSuffix(baseName, ext)
+		name = strings.ReplaceAll(name, "%", "%%")
+		if name != "" {
+			outTemplate = name + ".%(ext)s"
+		}
+	}
+	args = append(args, "-o", outTemplate)
+
+	quality := req.Quality
+	if quality == "" {
+		quality = "bestvideo+bestaudio/best"
+	}
+	if !validQuality.MatchString(quality) {
+		return "", fmt.Errorf("invalid quality format selector: %q", quality)
+	}
+	args = append(args, "-f", quality)
+
+	// Forward cookies via cookie file (same as YtdlpDownload)
+	var cookieFile string
+	if cookieStr := req.Headers["Cookie"]; cookieStr != "" {
+		f, err := os.CreateTemp("", "ytdlp-cookies-*.txt")
+		if err == nil {
+			cookieFile = f.Name()
+			host := extractHost(req.URL)
+			writeCookieFile(f, host, cookieStr)
+			f.Close()
+			args = append(args, "--cookies", cookieFile)
+		}
+	}
+
+	// Forward non-Cookie headers
+	for k, v := range req.Headers {
+		if strings.EqualFold(k, "Cookie") {
+			continue
+		}
+		if !validHeaderName.MatchString(k) {
+			continue
+		}
+		if strings.ContainsAny(v, "\r\n\x00") {
+			continue
+		}
+		args = append(args, "--add-header", k+":"+v)
+	}
+
+	args = append(args, req.URL)
+
+	if cookieFile != "" {
+		defer os.Remove(cookieFile)
+	}
+
+	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("yt-dlp --print filename failed: %w", err)
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
 // YtdlpDownload uses yt-dlp to download a video from a page URL.
 func YtdlpDownload(ctx context.Context, task *Task, downloadDir string) error {
 	task.SetState(model.StateDownloading)

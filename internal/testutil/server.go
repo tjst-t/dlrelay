@@ -21,7 +21,7 @@ func TestServer(t *testing.T) *httptest.Server {
 	}
 	tempDir := t.TempDir()
 
-	dlMgr := download.NewManager(downloadDir, tempDir, 3, nil)
+	dlMgr := download.NewManager(downloadDir, tempDir, 3, nil, nil)
 	convMgr := convert.NewManager()
 
 	srv := server.New(dlMgr, convMgr)
@@ -45,7 +45,7 @@ func TestServerWithDir(t *testing.T) (*httptest.Server, string) {
 	}
 	tempDir := t.TempDir()
 
-	dlMgr := download.NewManager(downloadDir, tempDir, 3, nil)
+	dlMgr := download.NewManager(downloadDir, tempDir, 3, nil, nil)
 	convMgr := convert.NewManager()
 
 	srv := server.New(dlMgr, convMgr)

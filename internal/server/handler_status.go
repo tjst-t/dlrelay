@@ -142,6 +142,7 @@ tr:hover td { background: rgba(232, 152, 48, 0.02); }
 .badge-queued { background: rgba(240, 176, 48, 0.12); color: var(--yellow); }
 .badge-failed { background: var(--red-dim); color: var(--red); }
 .badge-cancelled { background: rgba(96, 96, 120, 0.15); color: var(--muted); }
+.badge-skipped { background: rgba(80, 136, 240, 0.12); color: var(--blue); }
 .progress-bar {
   width: 100%;
   height: 5px;
@@ -175,6 +176,15 @@ tr:hover td { background: rgba(232, 152, 48, 0.02); }
 .size { white-space: nowrap; color: var(--text-2); }
 .error-text {
   color: var(--red);
+  font-size: 0.7rem;
+  margin-top: 0.2rem;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.skip-text {
+  color: var(--blue);
   font-size: 0.7rem;
   margin-top: 0.2rem;
   max-width: 340px;
@@ -403,7 +413,7 @@ function retryDownload(id) {
 function clearFinished() {
   fetch(API + "/api/downloads").then(function(r) { return r.json(); }).then(function(list) {
     var targets = list.filter(function(d) {
-      return d.state === "completed" || d.state === "failed" || d.state === "cancelled";
+      return d.state === "completed" || d.state === "failed" || d.state === "cancelled" || d.state === "skipped";
     });
     var promises = targets.map(function(d) {
       return fetch(API + "/api/downloads/" + d.id, { method: "DELETE" });
@@ -442,12 +452,12 @@ function refresh() {
   fetch(API + "/api/downloads").then(function(res) {
     return res.json();
   }).then(function(list) {
-    var counts = { total: list.length, downloading: 0, queued: 0, completed: 0, failed: 0, cancelled: 0 };
+    var counts = { total: list.length, downloading: 0, queued: 0, completed: 0, failed: 0, cancelled: 0, skipped: 0 };
     list.forEach(function(d) { if (counts[d.state] !== undefined) counts[d.state]++; });
 
     document.getElementById("stat-total").textContent = counts.total;
     document.getElementById("stat-active").textContent = counts.downloading + counts.queued;
-    document.getElementById("stat-completed").textContent = counts.completed;
+    document.getElementById("stat-completed").textContent = counts.completed + counts.skipped;
     document.getElementById("stat-failed").textContent = counts.failed + counts.cancelled;
 
     if (list.length === 0) {
@@ -455,10 +465,10 @@ function refresh() {
       return;
     }
 
-    var order = { downloading: 0, queued: 1, failed: 2, cancelled: 3, completed: 4 };
+    var order = { downloading: 0, queued: 1, failed: 2, cancelled: 3, skipped: 4, completed: 5 };
     list.sort(function(a, b) { return (order[a.state] || 9) - (order[b.state] || 9); });
 
-    var hasFinished = list.some(function(d) { return d.state === "completed" || d.state === "failed" || d.state === "cancelled"; });
+    var hasFinished = list.some(function(d) { return d.state === "completed" || d.state === "failed" || d.state === "cancelled" || d.state === "skipped"; });
     var html = '';
     if (hasFinished) {
       html += '<div class="toolbar"><button class="btn-clear" onclick="clearFinished()">Clear Finished</button></div>';
@@ -471,8 +481,8 @@ function refresh() {
     list.forEach(function(dl) {
       var pct = progressPct(dl);
       var canCancel = dl.state === "downloading" || dl.state === "queued";
-      var canRetry = dl.state === "failed" || dl.state === "cancelled";
-      var isDone = dl.state === "completed" || canRetry;
+      var canRetry = dl.state === "failed" || dl.state === "cancelled" || dl.state === "skipped";
+      var isDone = dl.state === "completed" || dl.state === "skipped" || dl.state === "failed" || dl.state === "cancelled";
       var sizeText = formatBytes(dl.bytes_received) + (dl.total_bytes > 0 ? ' / ' + formatBytes(dl.total_bytes) : '');
 
       // Filename with optional link to source page
@@ -482,7 +492,7 @@ function refresh() {
       }
 
       var actions = '';
-      if (dl.state === "completed" && dl.has_file && isVideoFile(dl.filename)) {
+      if ((dl.state === "completed" || dl.state === "skipped") && dl.has_file && isVideoFile(dl.filename)) {
         actions += '<button class="btn-preview" onclick="openPreview(\'' + dl.id + '\', \'' + esc(dl.filename).replace(/'/g, "\\'") + '\')">Preview</button>';
       }
       if (canRetry) {
@@ -499,6 +509,7 @@ function refresh() {
       html += '<td><div class="filename" title="' + esc(dl.filename) + '">' + fnText + '</div><div class="url" title="' + esc(dl.url) + '">' + esc(dl.url) + '</div></td>';
       html += '<td><span class="' + badgeClass(dl.state) + '">' + dl.state + '</span>';
       if (dl.error) html += '<div class="error-text" title="' + esc(dl.error) + '">' + esc(dl.error) + '</div>';
+      if (dl.skip_info) html += '<div class="skip-text" title="' + esc(dl.skip_info) + '">' + esc(dl.skip_info) + '</div>';
       html += '</td>';
       html += '<td style="min-width:110px"><div class="progress-bar"><div class="' + fillClass(dl.state) + '" style="width:' + pct + '%"></div></div><div style="font-size:.7rem;color:var(--muted);margin-top:.2rem">' + pct + '%</div></td>';
       html += '<td class="size">' + sizeText + '</td>';
@@ -510,6 +521,7 @@ function refresh() {
       cards += '<div class="filename">' + fnText + '</div>';
       cards += '<div class="url">' + esc(dl.url) + '</div>';
       if (dl.error) cards += '<div class="error-text">' + esc(dl.error) + '</div>';
+      if (dl.skip_info) cards += '<div class="skip-text">' + esc(dl.skip_info) + '</div>';
       cards += '<div class="card-row"><div class="progress-bar"><div class="' + fillClass(dl.state) + '" style="width:' + pct + '%"></div></div><span style="font-size:.7rem;color:var(--muted);white-space:nowrap">' + pct + '%</span></div>';
       if (actions) cards += '<div class="card-actions">' + actions + '</div>';
       cards += '</div>';

@@ -1,0 +1,27 @@
+# DL Relay configuration file
+# Default path: /etc/dlrelay/config.toml
+# Override with CONFIG_FILE environment variable
+#
+# Environment variables always take precedence over this file.
+
+listen_addr = ":8090"
+download_dir = "/downloads"
+# temp_dir = "/tmp"
+max_concurrent = 3
+# extension_dir = "/path/to/extension"
+# api_key = "your-secret-key"
+
+# Directories to check for existing files before downloading.
+# If a file with the same name (ignoring extension) is found,
+# the download will be skipped.
+# check_dirs = ["/media/videos", "/media/archive"]
+
+# Domain-based download directory rules.
+# Downloads from matching domains are saved to the specified directory.
+# [[download_rules]]
+# domain = "youtube.com"
+# dir = "/downloads/youtube"
+#
+# [[download_rules]]
+# domain = "twitter.com"
+# dir = "/downloads/twitter"

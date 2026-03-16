@@ -257,7 +257,7 @@ func TestExtensionZipEndpoint(t *testing.T) {
 	os.WriteFile(filepath.Join(extDir, "icon.svg"), []byte(`<svg></svg>`), 0o644)       // should be excluded
 	os.WriteFile(filepath.Join(extDir, ".hidden"), []byte(`secret`), 0o644)              // should be excluded
 
-	dlMgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil)
+	dlMgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil, nil)
 	convMgr := convert.NewManager()
 	srv := server.New(dlMgr, convMgr, server.WithExtensionDir(extDir))
 	ts := httptest.NewServer(srv)
@@ -339,7 +339,7 @@ func TestExtensionZipNotConfigured(t *testing.T) {
 
 func TestAPIKeyAuthBlocksMutations(t *testing.T) {
 	// Create server with API key
-	dlMgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil)
+	dlMgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil, nil)
 	convMgr := convert.NewManager()
 	srv := server.New(dlMgr, convMgr, server.WithAPIKey("test-secret"))
 	ts := httptest.NewServer(srv)
@@ -388,7 +388,7 @@ func TestAPIKeyAuthBlocksMutations(t *testing.T) {
 
 func TestAPIKeyAuthAllowsReads(t *testing.T) {
 	// Create server with API key
-	dlMgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil)
+	dlMgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil, nil)
 	convMgr := convert.NewManager()
 	srv := server.New(dlMgr, convMgr, server.WithAPIKey("test-secret"))
 	ts := httptest.NewServer(srv)
@@ -415,7 +415,7 @@ func TestAPIKeyAuthAllowsReads(t *testing.T) {
 }
 
 func TestAPIKeyViaQueryParamRejected(t *testing.T) {
-	dlMgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil)
+	dlMgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil, nil)
 	convMgr := convert.NewManager()
 	srv := server.New(dlMgr, convMgr, server.WithAPIKey("test-secret"))
 	ts := httptest.NewServer(srv)
@@ -517,7 +517,7 @@ func TestBookmarkletPage(t *testing.T) {
 }
 
 func TestBookmarkletPageWithAPIKey(t *testing.T) {
-	dlMgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil)
+	dlMgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil, nil)
 	convMgr := convert.NewManager()
 	srv := server.New(dlMgr, convMgr, server.WithAPIKey("my-secret-key"))
 	ts := httptest.NewServer(srv)

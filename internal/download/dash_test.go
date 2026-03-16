@@ -145,7 +145,7 @@ func TestDASHDownloadE2E(t *testing.T) {
 
 	downloadDir := t.TempDir()
 	tempDir := t.TempDir()
-	mgr := NewManager(downloadDir, tempDir, 3, nil)
+	mgr := NewManager(downloadDir, tempDir, 3, nil, nil)
 
 	id, err := mgr.Submit(model.DownloadRequest{
 		URL:      srv.URL + "/video.mp4",
@@ -201,7 +201,7 @@ func TestManagerRoutesDASH(t *testing.T) {
 
 	downloadDir := t.TempDir()
 	tempDir := t.TempDir()
-	mgr := NewManager(downloadDir, tempDir, 3, nil)
+	mgr := NewManager(downloadDir, tempDir, 3, nil, nil)
 
 	id, err := mgr.Submit(model.DownloadRequest{
 		URL:      srv.URL + "/v.mp4",

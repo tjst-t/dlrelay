@@ -3,6 +3,7 @@ bin/
 /client
 *.exe
 .env
+config.toml
 node_modules/
 test/browser/screenshots/
 test/browser/results/

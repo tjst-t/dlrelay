@@ -24,7 +24,8 @@ serve: build-server
 	@portman env --name api --expose --output $(PORTMAN_ENV)
 	@. $(PORTMAN_ENV) && \
 	  echo "==> Starting server on port $$API_PORT (log: $(LOG_FILE))" && \
-	  LISTEN_ADDR=:$$API_PORT DOWNLOAD_DIR=$${DOWNLOAD_DIR:-/tmp/dlrelay-downloads} EXTENSION_DIR=$(CURDIR)/extension \
+	  CONFIG_FILE=$(CURDIR)/config.toml \
+	  LISTEN_ADDR=:$$API_PORT EXTENSION_DIR=$(CURDIR)/extension \
 	  nohup ./bin/dlrelay-server > $(LOG_FILE) 2>&1 & \
 	  echo $$! > $(PID_FILE) && \
 	  echo "    PID: $$(cat $(PID_FILE))"
