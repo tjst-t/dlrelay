@@ -39,6 +39,7 @@ func YtdlpFilename(ctx context.Context, req model.DownloadRequest) (string, erro
 		"--print", "filename",
 		"--merge-output-format", "mp4",
 		"--js-runtimes", "node",
+		"--remote-components", "ejs:github",
 	}
 
 	// Use same output template logic as YtdlpDownload
@@ -143,7 +144,8 @@ func YtdlpDownload(ctx context.Context, task *Task, downloadDir string) error {
 		"-o", outTemplate,
 		"--no-overwrites",
 		"--merge-output-format", "mp4",
-		"--js-runtimes", "node", // YouTube n-challenge requires a JS runtime; node is available
+		"--js-runtimes", "node",
+		"--remote-components", "ejs:github", // YouTube n-challenge solver script
 	}
 
 	// Quality/format selection
