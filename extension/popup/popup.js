@@ -70,7 +70,7 @@ async function load() {
     btn.classList.toggle("active", btn.dataset.mode === settings.mode);
   });
 
-  dashboardLink.href = settings.serverUrl ? settings.serverUrl + "/status" : "#";
+  dashboardLink.href = settings.serverUrl ? settings.serverUrl + "/" : "#";
 
   await checkHealth(settings.serverUrl);
   await renderMedia();
@@ -305,7 +305,7 @@ serverUrlInput.addEventListener("input", () => {
   saveTimer = setTimeout(async () => {
     const serverUrl = serverUrlInput.value.replace(/\/+$/, "");
     await chrome.storage.local.set({ serverUrl });
-    dashboardLink.href = serverUrl ? serverUrl + "/status" : "#";
+    dashboardLink.href = serverUrl ? serverUrl + "/" : "#";
     await checkHealth(serverUrl);
   }, 500);
 });
