@@ -92,7 +92,6 @@ code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
 }
 .header-link:hover { color: var(--accent); }
 .header-link-active { color: var(--accent); }
-.refresh-info { color: var(--muted); font-size: 0.78rem; }
 .stats { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
 .stat {
   background: var(--surface);
@@ -362,7 +361,6 @@ tr:hover td { background: rgba(232, 152, 48, 0.02); }
       <a class="header-link header-link-active" href="{{SERVER_URL}}/">Downloads</a>
       <a class="header-link" href="{{SERVER_URL}}/setup">Extension</a>
       <a class="header-link" href="{{SERVER_URL}}/bookmarklet">Bookmarklet</a>
-      <div class="refresh-info">Auto-refresh: <span id="countdown">2</span>s</div>
     </nav>
   </header>
 
@@ -566,7 +564,6 @@ refresh();
 setInterval(function() {
   timer--;
   if (timer <= 0) { timer = 2; refresh(); }
-  document.getElementById("countdown").textContent = timer;
 }, 1000);
 </script>
 </body>

@@ -227,45 +227,6 @@ code {
 }
 .browser-content { display: none; }
 .browser-content.active { display: block; }
-.api-table {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--surface);
-}
-.api-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.45rem 0.85rem;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.82rem;
-}
-.api-row:last-child { border-bottom: none; }
-.api-row:hover { background: var(--surface-2); }
-.method {
-  font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
-  font-size: 0.68rem;
-  font-weight: 700;
-  padding: 0.1rem 0.35rem;
-  border-radius: 4px;
-  text-transform: uppercase;
-  flex: 0 0 46px;
-  text-align: center;
-  letter-spacing: 0.02em;
-}
-.method-get { background: rgba(48, 216, 128, 0.10); color: var(--green); }
-.method-post { background: rgba(80, 136, 240, 0.10); color: var(--blue); }
-.method-del { background: rgba(232, 80, 80, 0.10); color: var(--red); }
-.api-path {
-  font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
-  font-size: 0.8rem;
-  color: var(--text);
-  flex: 1;
-}
-.api-path a { color: var(--text); text-decoration: none; }
-.api-path a:hover { color: var(--accent); }
-.api-desc { color: var(--muted); font-size: 0.76rem; flex: 0 0 130px; text-align: right; }
 .footer {
   padding: 2rem 0;
   text-align: center;
@@ -278,7 +239,6 @@ code {
   .header { flex-wrap: wrap; gap: 0.5rem; }
   .header-right { gap: 0.75rem; }
   .step { gap: 0.75rem; }
-  .api-desc { display: none; }
 }
 </style>
 </head>
@@ -332,57 +292,6 @@ code {
       <li style="color:var(--text-2);font-size:0.84rem;padding:0.2rem 0 0.2rem 1.4rem;position:relative;counter-increment:sub;line-height:1.55">ツールバーのアイコンをクリックし、検出された動画を選択</li>
       <li style="color:var(--text-2);font-size:0.84rem;padding:0.2rem 0 0.2rem 1.4rem;position:relative;counter-increment:sub;line-height:1.55">「Download」ボタンでサーバーへダウンロード開始</li>
     </ol>
-  </section>
-
-  <section class="section">
-    <h2 class="section-title">API エンドポイント</h2>
-    <div class="api-table">
-      <div class="api-row">
-        <span class="method method-get">GET</span>
-        <span class="api-path"><a href="{{SERVER_URL}}/api/health">/api/health</a></span>
-        <span class="api-desc">ヘルスチェック</span>
-      </div>
-      <div class="api-row">
-        <span class="method method-post">POST</span>
-        <span class="api-path">/api/downloads</span>
-        <span class="api-desc">ダウンロード開始</span>
-      </div>
-      <div class="api-row">
-        <span class="method method-get">GET</span>
-        <span class="api-path"><a href="{{SERVER_URL}}/api/downloads">/api/downloads</a></span>
-        <span class="api-desc">ダウンロード一覧</span>
-      </div>
-      <div class="api-row">
-        <span class="method method-get">GET</span>
-        <span class="api-path">/api/downloads/{id}</span>
-        <span class="api-desc">ダウンロード状況</span>
-      </div>
-      <div class="api-row">
-        <span class="method method-del">DEL</span>
-        <span class="api-path">/api/downloads/{id}</span>
-        <span class="api-desc">キャンセル</span>
-      </div>
-      <div class="api-row">
-        <span class="method method-post">POST</span>
-        <span class="api-path">/api/convert</span>
-        <span class="api-desc">FFmpeg 変換</span>
-      </div>
-      <div class="api-row">
-        <span class="method method-post">POST</span>
-        <span class="api-path">/api/probe</span>
-        <span class="api-desc">メディア情報取得</span>
-      </div>
-      <div class="api-row">
-        <span class="method method-get">GET</span>
-        <span class="api-path"><a href="{{SERVER_URL}}/api/codecs">/api/codecs</a></span>
-        <span class="api-desc">コーデック一覧</span>
-      </div>
-      <div class="api-row">
-        <span class="method method-get">GET</span>
-        <span class="api-path"><a href="{{SERVER_URL}}/api/formats">/api/formats</a></span>
-        <span class="api-desc">フォーマット一覧</span>
-      </div>
-    </div>
   </section>
 
   <footer class="footer">dlrelay {{VERSION}}</footer>
