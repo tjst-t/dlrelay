@@ -10,6 +10,7 @@ type DownloadRequest struct {
 	Directory   string            `json:"directory,omitempty"`
 	Method      string            `json:"method,omitempty"`  // "ytdlp" to use yt-dlp
 	Quality     string            `json:"quality,omitempty"` // yt-dlp format selector (e.g. "bestvideo+bestaudio/best")
+	PageURL     string            `json:"page_url,omitempty"`
 }
 
 // DownloadState represents the current state of a download task.
@@ -27,6 +28,7 @@ const (
 type DownloadStatus struct {
 	ID            string        `json:"id"`
 	URL           string        `json:"url"`
+	PageURL       string        `json:"page_url,omitempty"`
 	State         DownloadState `json:"state"`
 	BytesReceived int64         `json:"bytes_received"`
 	TotalBytes    int64         `json:"total_bytes"`

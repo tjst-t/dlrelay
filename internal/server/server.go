@@ -116,6 +116,7 @@ func (s *Server) routes() {
 		r.Group(func(r chi.Router) {
 			r.Use(s.apiKeyAuth)
 			r.Post("/downloads", s.handleCreateDownload)
+			r.Post("/downloads/{id}/retry", s.handleRetryDownload)
 			r.Delete("/downloads/{id}", s.handleDeleteDownload)
 			r.Post("/convert", s.handleCreateConvert)
 			r.Delete("/convert/{id}", s.handleDeleteConvert)
@@ -252,6 +253,17 @@ func (s *Server) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "inline; filename*=UTF-8''"+url.PathEscape(filename))
 
 	http.ServeContent(w, r, filename, stat.ModTime(), f)
+}
+
+// handleRetryDownload retries a failed or cancelled download.
+func (s *Server) handleRetryDownload(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if err := s.dlMgr.Retry(id); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	status, _ := s.dlMgr.Get(id)
+	writeJSON(w, http.StatusAccepted, status)
 }
 
 // handleDeleteDownload cancels and deletes a download task.

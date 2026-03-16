@@ -205,22 +205,25 @@ func downloadSegment(ctx context.Context, segURL string, headers map[string]stri
 }
 
 func downloadSegmentCounted(ctx context.Context, segURL string, headers map[string]string, w io.Writer) (int64, error) {
-	// Retry up to 3 times for transient network failures
+	// Retry with exponential backoff for transient CDN failures
+	const maxRetries = 6
 	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
+			// Exponential backoff: 2s, 4s, 8s, 16s, 32s
+			backoff := time.Duration(1<<uint(attempt)) * time.Second
+			slog.Info("HLS segment retry", "url", segURL, "attempt", attempt+1, "backoff", backoff)
 			select {
 			case <-ctx.Done():
 				return 0, ctx.Err()
-			case <-time.After(time.Duration(attempt) * time.Second):
+			case <-time.After(backoff):
 			}
 		}
-		segCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		segCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 		body, err := fetchURL(segCtx, segURL, headers)
 		if err != nil {
 			cancel()
 			lastErr = err
-			slog.Debug("HLS segment fetch failed, retrying", "url", segURL, "attempt", attempt+1, "err", err)
 			continue
 		}
 		n, err := io.Copy(w, body)
@@ -228,7 +231,6 @@ func downloadSegmentCounted(ctx context.Context, segURL string, headers map[stri
 		cancel()
 		if err != nil {
 			lastErr = err
-			slog.Debug("HLS segment read failed, retrying", "url", segURL, "attempt", attempt+1, "err", err)
 			continue
 		}
 		return n, nil

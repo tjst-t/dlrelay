@@ -109,6 +109,7 @@ func (t *Task) Status() model.DownloadStatus {
 	return model.DownloadStatus{
 		ID:            t.id,
 		URL:           t.url,
+		PageURL:       t.req.PageURL,
 		State:         t.state,
 		BytesReceived: t.bytes,
 		TotalBytes:    t.total,

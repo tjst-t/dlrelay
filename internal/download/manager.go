@@ -268,6 +268,30 @@ func (m *Manager) Delete(id string) error {
 	return nil
 }
 
+// Retry re-submits a failed or cancelled download task.
+func (m *Manager) Retry(id string) error {
+	v, ok := m.tasks.Load(id)
+	if !ok {
+		return fmt.Errorf("task %s not found", id)
+	}
+	old := v.(*Task)
+	st := old.Status()
+	if st.State != model.StateFailed && st.State != model.StateCancelled {
+		return fmt.Errorf("task %s is not in a retryable state (%s)", id, st.State)
+	}
+
+	// Remove old task and create a new one with the same request
+	m.tasks.Delete(id)
+	ctx, cancel := context.WithCancel(context.Background())
+	task := NewTask(id, old.req, cancel)
+	task.onChange = func() { m.schedulePersist() }
+	m.tasks.Store(id, task)
+	m.persist()
+
+	go m.executeDownload(ctx, task, old.req)
+	return nil
+}
+
 // DownloadDir returns the default download directory path.
 func (m *Manager) DownloadDir() string {
 	return m.downloadDir

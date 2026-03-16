@@ -561,6 +561,7 @@ async function handleDownloadRequest(item, tabId) {
     url: item.url,
     filename: item.filename,
     headers,
+    page_url: item.pageUrl || "",
   };
 
   // yt-dlp: server-side download via page URL extraction.

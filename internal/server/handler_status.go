@@ -47,6 +47,7 @@ body {
   min-height: 100vh;
   line-height: 1.6;
   padding: 0 1rem;
+  overflow-x: hidden;
 }
 body::after {
   content: "";
@@ -57,7 +58,7 @@ body::after {
   pointer-events: none;
   z-index: 10000;
 }
-.container { max-width: 960px; margin: 0 auto; }
+.container { max-width: 960px; margin: 0 auto; overflow: hidden; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { color: var(--accent-hover); }
 code { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
@@ -181,7 +182,7 @@ tr:hover td { background: rgba(232, 152, 48, 0.02); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.btn-cancel, .btn-preview, .btn-delete {
+.btn-cancel, .btn-preview, .btn-delete, .btn-retry {
   background: none;
   padding: 0.18rem 0.5rem;
   border-radius: 4px;
@@ -200,6 +201,14 @@ tr:hover td { background: rgba(232, 152, 48, 0.02); }
   color: var(--muted);
 }
 .btn-delete:hover { background: var(--muted); color: var(--bg); }
+.btn-retry {
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  margin-right: 0.3rem;
+}
+.btn-retry:hover { background: var(--accent); color: var(--bg); }
+.filename a { color: var(--text); text-decoration: none; }
+.filename a:hover { color: var(--accent); text-decoration: underline; }
 .btn-preview {
   border: 1px solid var(--green);
   color: var(--green);
@@ -281,13 +290,43 @@ tr:hover td { background: rgba(232, 152, 48, 0.02); }
 .empty-icon { font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.3; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 .downloading-anim { animation: pulse 1.5s infinite; }
+.cards { display: none; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem;
+  margin-bottom: 0.6rem;
+  overflow: hidden;
+  min-width: 0;
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.card-header .badge { flex-shrink: 0; }
+.card .filename { max-width: 100%; white-space: normal; overflow-wrap: break-word; word-break: break-word; }
+.card .url { max-width: 100%; white-space: normal; overflow-wrap: break-word; word-break: break-word; }
+.card .error-text { max-width: 100%; white-space: normal; overflow-wrap: break-word; word-break: break-word; }
+.card-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.4rem;
+}
+.card-row .progress-bar { flex: 1; }
+.card-actions { margin-top: 0.5rem; display: flex; gap: 0.4rem; }
 @media (max-width: 700px) {
+  .header { flex-wrap: wrap; gap: 0.5rem; }
+  .header-right { gap: 0.75rem; }
   .stats { gap: 0.5rem; }
-  .stat { min-width: 80px; padding: 0.6rem 0.9rem; }
+  .stat { flex: 1; min-width: 0; padding: 0.6rem 0.7rem; text-align: center; }
   .stat-value { font-size: 1.1rem; }
-  .filename { max-width: 160px; }
-  .url { max-width: 140px; }
-  td, th { padding: 0.5rem 0.6rem; }
+  .table-view { display: none !important; }
+  .cards { display: block !important; }
 }
 </style>
 </head>
@@ -357,6 +396,10 @@ function deleteDownload(id) {
   fetch(API + "/api/downloads/" + id, { method: "DELETE" }).then(function() { refresh(); });
 }
 
+function retryDownload(id) {
+  fetch(API + "/api/downloads/" + id + "/retry", { method: "POST" }).then(function() { refresh(); });
+}
+
 function clearFinished() {
   fetch(API + "/api/downloads").then(function(r) { return r.json(); }).then(function(list) {
     var targets = list.filter(function(d) {
@@ -421,21 +464,29 @@ function refresh() {
       html += '<div class="toolbar"><button class="btn-clear" onclick="clearFinished()">Clear Finished</button></div>';
     }
 
-    html += '<table><thead><tr><th>File</th><th>Status</th><th>Progress</th><th>Size</th><th></th></tr></thead><tbody>';
+    // Desktop: table view
+    html += '<table class="table-view"><thead><tr><th>File</th><th>Status</th><th>Progress</th><th>Size</th><th></th></tr></thead><tbody>';
+    // Mobile: card view
+    var cards = '';
     list.forEach(function(dl) {
       var pct = progressPct(dl);
       var canCancel = dl.state === "downloading" || dl.state === "queued";
-      var isDone = dl.state === "completed" || dl.state === "failed" || dl.state === "cancelled";
-      html += '<tr>';
-      html += '<td><div class="filename" title="' + esc(dl.filename) + '">' + esc(dl.filename) + '</div><div class="url" title="' + esc(dl.url) + '">' + esc(dl.url) + '</div></td>';
-      html += '<td><span class="' + badgeClass(dl.state) + '">' + dl.state + '</span>';
-      if (dl.error) html += '<div class="error-text" title="' + esc(dl.error) + '">' + esc(dl.error) + '</div>';
-      html += '</td>';
-      html += '<td style="min-width:110px"><div class="progress-bar"><div class="' + fillClass(dl.state) + '" style="width:' + pct + '%"></div></div><div style="font-size:.7rem;color:var(--muted);margin-top:.2rem">' + pct + '%</div></td>';
-      html += '<td class="size">' + formatBytes(dl.bytes_received) + (dl.total_bytes > 0 ? ' / ' + formatBytes(dl.total_bytes) : '') + '</td>';
+      var canRetry = dl.state === "failed" || dl.state === "cancelled";
+      var isDone = dl.state === "completed" || canRetry;
+      var sizeText = formatBytes(dl.bytes_received) + (dl.total_bytes > 0 ? ' / ' + formatBytes(dl.total_bytes) : '');
+
+      // Filename with optional link to source page
+      var fnText = esc(dl.filename);
+      if (dl.page_url) {
+        fnText = '<a href="' + esc(dl.page_url) + '" target="_blank" rel="noopener">' + fnText + '</a>';
+      }
+
       var actions = '';
       if (dl.state === "completed" && dl.has_file && isVideoFile(dl.filename)) {
         actions += '<button class="btn-preview" onclick="openPreview(\'' + dl.id + '\', \'' + esc(dl.filename).replace(/'/g, "\\'") + '\')">Preview</button>';
+      }
+      if (canRetry) {
+        actions += '<button class="btn-retry" onclick="retryDownload(\'' + dl.id + '\')">Retry</button>';
       }
       if (canCancel) {
         actions += '<button class="btn-cancel" onclick="cancelDownload(\'' + dl.id + '\')">Cancel</button>';
@@ -443,10 +494,28 @@ function refresh() {
       if (isDone) {
         actions += '<button class="btn-delete" onclick="deleteDownload(\'' + dl.id + '\')" title="Remove from list">&times;</button>';
       }
+      // Table row
+      html += '<tr>';
+      html += '<td><div class="filename" title="' + esc(dl.filename) + '">' + fnText + '</div><div class="url" title="' + esc(dl.url) + '">' + esc(dl.url) + '</div></td>';
+      html += '<td><span class="' + badgeClass(dl.state) + '">' + dl.state + '</span>';
+      if (dl.error) html += '<div class="error-text" title="' + esc(dl.error) + '">' + esc(dl.error) + '</div>';
+      html += '</td>';
+      html += '<td style="min-width:110px"><div class="progress-bar"><div class="' + fillClass(dl.state) + '" style="width:' + pct + '%"></div></div><div style="font-size:.7rem;color:var(--muted);margin-top:.2rem">' + pct + '%</div></td>';
+      html += '<td class="size">' + sizeText + '</td>';
       html += '<td>' + actions + '</td>';
       html += '</tr>';
+      // Card
+      cards += '<div class="card">';
+      cards += '<div class="card-header"><span class="' + badgeClass(dl.state) + '">' + dl.state + '</span><span class="size">' + sizeText + '</span></div>';
+      cards += '<div class="filename">' + fnText + '</div>';
+      cards += '<div class="url">' + esc(dl.url) + '</div>';
+      if (dl.error) cards += '<div class="error-text">' + esc(dl.error) + '</div>';
+      cards += '<div class="card-row"><div class="progress-bar"><div class="' + fillClass(dl.state) + '" style="width:' + pct + '%"></div></div><span style="font-size:.7rem;color:var(--muted);white-space:nowrap">' + pct + '%</span></div>';
+      if (actions) cards += '<div class="card-actions">' + actions + '</div>';
+      cards += '</div>';
     });
     html += '</tbody></table>';
+    html += '<div class="cards">' + cards + '</div>';
     document.getElementById("content").innerHTML = html;
   }).catch(function(e) {
     console.error("refresh failed:", e);
