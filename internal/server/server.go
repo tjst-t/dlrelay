@@ -3,13 +3,20 @@ package server
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"mime"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -21,11 +28,48 @@ import (
 
 // Server is the dlrelay HTTP API server.
 type Server struct {
-	router       chi.Router
-	dlMgr        *download.Manager
-	convMgr      *convert.Manager
-	extensionDir string
-	apiKey       string
+	router             chi.Router
+	dlMgr              *download.Manager
+	convMgr            *convert.Manager
+	extensionDir       string
+	apiKey             string
+	maxReqPerMin       int
+	rateLimitMu        sync.Mutex
+	rateBuckets        map[string]*rateBucket
+	rateBucketsGlobal  *rateBucket
+	toolCache          map[string]bool
+	toolCacheOnce      sync.Once
+}
+
+type rateBucket struct {
+	tokens    float64
+	maxTokens float64
+	lastTime  time.Time
+	rate      float64 // tokens per second
+}
+
+func newRateBucket(perMinute int) *rateBucket {
+	return &rateBucket{
+		tokens:    float64(perMinute),
+		maxTokens: float64(perMinute),
+		lastTime:  time.Now(),
+		rate:      float64(perMinute) / 60.0,
+	}
+}
+
+func (b *rateBucket) allow() bool {
+	now := time.Now()
+	elapsed := now.Sub(b.lastTime).Seconds()
+	b.lastTime = now
+	b.tokens += elapsed * b.rate
+	if b.tokens > b.maxTokens {
+		b.tokens = b.maxTokens
+	}
+	if b.tokens < 1 {
+		return false
+	}
+	b.tokens--
+	return true
 }
 
 // Option is a functional option for Server.
@@ -41,16 +85,24 @@ func WithAPIKey(key string) Option {
 	return func(s *Server) { s.apiKey = key }
 }
 
+// WithMaxRequestsPerMinute sets the rate limit for protected endpoints.
+func WithMaxRequestsPerMinute(n int) Option {
+	return func(s *Server) { s.maxReqPerMin = n }
+}
+
 // New creates a new Server.
 func New(dlMgr *download.Manager, convMgr *convert.Manager, opts ...Option) *Server {
 	s := &Server{
-		router:  chi.NewRouter(),
-		dlMgr:   dlMgr,
-		convMgr: convMgr,
+		router:       chi.NewRouter(),
+		dlMgr:        dlMgr,
+		convMgr:      convMgr,
+		maxReqPerMin: 60,
+		rateBuckets:  make(map[string]*rateBucket),
 	}
 	for _, o := range opts {
 		o(s)
 	}
+	s.rateBucketsGlobal = newRateBucket(s.maxReqPerMin * 5)
 	s.routes()
 	return s
 }
@@ -89,6 +141,60 @@ func (s *Server) apiKeyAuth(next http.Handler) http.Handler {
 	})
 }
 
+// rateLimit is a middleware that applies token-bucket rate limiting to requests.
+func (s *Server) rateLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip := clientIP(r)
+
+		s.rateLimitMu.Lock()
+		// Global rate limit
+		if !s.rateBucketsGlobal.allow() {
+			s.rateLimitMu.Unlock()
+			writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
+			return
+		}
+		// Per-IP rate limit
+		bucket, ok := s.rateBuckets[ip]
+		if !ok {
+			bucket = newRateBucket(s.maxReqPerMin)
+			s.rateBuckets[ip] = bucket
+			// Periodically clean old buckets (keep map bounded)
+			if len(s.rateBuckets) > 1000 {
+				for k, v := range s.rateBuckets {
+					if time.Since(v.lastTime) > 5*time.Minute {
+						delete(s.rateBuckets, k)
+					}
+				}
+			}
+		}
+		if !bucket.allow() {
+			s.rateLimitMu.Unlock()
+			writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
+			return
+		}
+		s.rateLimitMu.Unlock()
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if parts := strings.SplitN(xff, ",", 2); len(parts) > 0 {
+			return strings.TrimSpace(parts[0])
+		}
+	}
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return xri
+	}
+	// Strip port from RemoteAddr
+	addr := r.RemoteAddr
+	if i := strings.LastIndex(addr, ":"); i >= 0 {
+		return addr[:i]
+	}
+	return addr
+}
+
 func (s *Server) routes() {
 	s.router.Use(middleware.Recoverer)
 	s.router.Use(middleware.Logger)
@@ -113,8 +219,9 @@ func (s *Server) routes() {
 		r.Get("/downloads/{id}/file", s.handleDownloadFile)
 		r.Get("/convert/{id}", s.handleGetConvert)
 
-		// Protected endpoints (require API key when configured)
+		// Protected endpoints (require API key when configured + rate limiting)
 		r.Group(func(r chi.Router) {
+			r.Use(s.rateLimit)
 			r.Use(s.apiKeyAuth)
 			r.Post("/downloads", s.handleCreateDownload)
 			r.Post("/downloads/{id}/retry", s.handleRetryDownload)
@@ -147,13 +254,104 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, model.ErrorResponse{Error: msg})
 }
 
+// httpStatusForError returns the appropriate HTTP status code for a download error.
+func httpStatusForError(err error) int {
+	var dlErr *download.DownloadError
+	if errors.As(err, &dlErr) {
+		switch dlErr.Kind {
+		case download.ErrValidation:
+			return http.StatusBadRequest
+		case download.ErrNetwork:
+			return http.StatusBadGateway
+		case download.ErrFileSystem:
+			return http.StatusInternalServerError
+		case download.ErrExternal:
+			return http.StatusBadGateway
+		case download.ErrCancelled:
+			return http.StatusConflict
+		}
+	}
+	return http.StatusInternalServerError
+}
+
+// sanitizeError removes internal paths and stack traces from error messages.
+var sensitivePathRe = regexp.MustCompile(`(?:/home/\S+|/tmp/\S+|/downloads/\S+|/var/\S+|/etc/\S+)`)
+
+func sanitizeError(msg string) string {
+	msg = sensitivePathRe.ReplaceAllString(msg, "[path]")
+	// Remove long stack traces (lines starting with goroutine, tab-indented lines)
+	lines := strings.Split(msg, "\n")
+	var filtered []string
+	for _, line := range lines {
+		if strings.HasPrefix(line, "goroutine ") || strings.HasPrefix(line, "\t") {
+			continue
+		}
+		filtered = append(filtered, line)
+	}
+	result := strings.Join(filtered, "\n")
+	// Limit error length
+	if len(result) > 500 {
+		result = result[:500]
+	}
+	return result
+}
+
+// checkToolExists checks if a command is available on the system.
+func (s *Server) checkToolExists(name string) bool {
+	s.toolCacheOnce.Do(func() {
+		s.toolCache = make(map[string]bool)
+		for _, tool := range []string{"yt-dlp", "ffmpeg", "ffprobe"} {
+			_, err := exec.LookPath(tool)
+			s.toolCache[tool] = err == nil
+		}
+	})
+	return s.toolCache[name]
+}
+
 // handleHealth returns server health status.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": version.Version})
+	// Count active downloads
+	list := s.dlMgr.List()
+	activeCount := 0
+	for _, dl := range list {
+		if dl.State == model.StateDownloading || dl.State == model.StateQueued {
+			activeCount++
+		}
+	}
+
+	// Check disk space
+	downloadDir := s.dlMgr.DownloadDir()
+	diskFree := int64(-1)
+	diskTotal := int64(-1)
+	if stat, err := diskUsage(downloadDir); err == nil {
+		diskFree = stat.free
+		diskTotal = stat.total
+	}
+
+	resp := map[string]any{
+		"status":           "ok",
+		"version":          version.Version,
+		"active_downloads": activeCount,
+		"total_downloads":  len(list),
+		"tools": map[string]bool{
+			"yt-dlp":  s.checkToolExists("yt-dlp"),
+			"ffmpeg":  s.checkToolExists("ffmpeg"),
+			"ffprobe": s.checkToolExists("ffprobe"),
+		},
+	}
+	if diskFree >= 0 {
+		resp["disk_free_bytes"] = diskFree
+		resp["disk_total_bytes"] = diskTotal
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
+
+// maxRequestBodySize limits request body size to 1MB.
+const maxRequestBodySize = 1 << 20
 
 // handleCreateDownload creates a new download task.
 func (s *Server) handleCreateDownload(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	var req model.DownloadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -166,7 +364,12 @@ func (s *Server) handleCreateDownload(w http.ResponseWriter, r *http.Request) {
 
 	id, err := s.dlMgr.Submit(req)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		status := httpStatusForError(err)
+		// URL validation from Submit wraps with "invalid URL:"
+		if strings.Contains(err.Error(), "invalid URL") || strings.Contains(err.Error(), "invalid audio URL") {
+			status = http.StatusBadRequest
+		}
+		writeError(w, status, sanitizeError(err.Error()))
 		return
 	}
 
@@ -174,8 +377,41 @@ func (s *Server) handleCreateDownload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, status)
 }
 
-// handleListDownloads returns all download tasks.
+// handleListDownloads returns download tasks with optional pagination and filtering.
 func (s *Server) handleListDownloads(w http.ResponseWriter, r *http.Request) {
+	// Parse pagination parameters
+	limitStr := r.URL.Query().Get("limit")
+	offsetStr := r.URL.Query().Get("offset")
+	stateFilter := r.URL.Query().Get("state")
+
+	limit := 100
+	offset := 0
+	if limitStr != "" {
+		if n, err := strconv.Atoi(limitStr); err == nil && n > 0 {
+			limit = n
+			if limit > 500 {
+				limit = 500
+			}
+		}
+	}
+	if offsetStr != "" {
+		if n, err := strconv.Atoi(offsetStr); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+
+	// Use paginated list if parameters are provided
+	if limitStr != "" || offsetStr != "" || stateFilter != "" {
+		items, total := s.dlMgr.ListPaginated(offset, limit, stateFilter)
+		if items == nil {
+			items = []model.DownloadStatus{}
+		}
+		w.Header().Set("X-Total-Count", fmt.Sprintf("%d", total))
+		writeJSON(w, http.StatusOK, items)
+		return
+	}
+
+	// Default: return all (backward compatible)
 	list := s.dlMgr.List()
 	if list == nil {
 		list = []model.DownloadStatus{}
@@ -279,6 +515,7 @@ func (s *Server) handleDeleteDownload(w http.ResponseWriter, r *http.Request) {
 
 // handleCreateConvert creates a new conversion task.
 func (s *Server) handleCreateConvert(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	var req model.ConvertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -288,7 +525,7 @@ func (s *Server) handleCreateConvert(w http.ResponseWriter, r *http.Request) {
 	id, err := s.convMgr.Submit(req)
 	if err != nil {
 		slog.Error("failed to submit convert", "error", err)
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, http.StatusBadRequest, sanitizeError(err.Error()))
 		return
 	}
 
@@ -319,6 +556,7 @@ func (s *Server) handleDeleteConvert(w http.ResponseWriter, r *http.Request) {
 
 // handleProbe runs ffprobe on the given URL.
 func (s *Server) handleProbe(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	var req model.ProbeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -327,7 +565,7 @@ func (s *Server) handleProbe(w http.ResponseWriter, r *http.Request) {
 
 	result, err := convert.Probe(r.Context(), req.URL, req.Headers)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, http.StatusInternalServerError, sanitizeError(err.Error()))
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -337,7 +575,7 @@ func (s *Server) handleProbe(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCodecs(w http.ResponseWriter, r *http.Request) {
 	codecs, err := convert.ListCodecs(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, http.StatusInternalServerError, sanitizeError(err.Error()))
 		return
 	}
 	writeJSON(w, http.StatusOK, codecs)
@@ -347,7 +585,7 @@ func (s *Server) handleCodecs(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleFormats(w http.ResponseWriter, r *http.Request) {
 	formats, err := convert.ListFormats(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, http.StatusInternalServerError, sanitizeError(err.Error()))
 		return
 	}
 	writeJSON(w, http.StatusOK, formats)

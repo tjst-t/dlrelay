@@ -28,7 +28,7 @@ func TestDownloadToFile(t *testing.T) {
 	defer srv.Close()
 
 	tmpFile := filepath.Join(t.TempDir(), "output.bin")
-	err := downloadToFile(context.Background(), srv.URL+"/test.bin", nil, tmpFile)
+	err := downloadToFile(context.Background(), srv.URL+"/test.bin", nil, tmpFile, 0)
 	if err != nil {
 		t.Fatalf("downloadToFile failed: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestDownloadToFileWithHeaders(t *testing.T) {
 	headers := map[string]string{
 		"Authorization": "Bearer test-token",
 	}
-	err := downloadToFile(context.Background(), srv.URL+"/test.bin", headers, tmpFile)
+	err := downloadToFile(context.Background(), srv.URL+"/test.bin", headers, tmpFile, 0)
 	if err != nil {
 		t.Fatalf("downloadToFile failed: %v", err)
 	}

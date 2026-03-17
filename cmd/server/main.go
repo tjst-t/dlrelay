@@ -17,6 +17,11 @@ import (
 func main() {
 	cfg := server.LoadConfig()
 
+	if err := server.ValidateConfig(cfg); err != nil {
+		slog.Error("invalid configuration", "error", err)
+		os.Exit(1)
+	}
+
 	if err := os.MkdirAll(cfg.DownloadDir, 0o755); err != nil {
 		slog.Error("failed to create download directory", "error", err)
 		os.Exit(1)
@@ -29,6 +34,12 @@ func main() {
 	}
 
 	dlMgr := download.NewManager(cfg.DownloadDir, cfg.TempDir, cfg.MaxConcurrent, cfg.DownloadRules, cfg.CheckDirs)
+	if cfg.MaxCompletedTasks > 0 {
+		dlMgr.SetMaxCompletedTasks(cfg.MaxCompletedTasks)
+	}
+	if cfg.BandwidthLimit > 0 {
+		dlMgr.SetBandwidthLimit(cfg.BandwidthLimit)
+	}
 	convMgr := convert.NewManager()
 
 	var opts []server.Option
@@ -37,6 +48,9 @@ func main() {
 	}
 	if cfg.APIKey != "" {
 		opts = append(opts, server.WithAPIKey(cfg.APIKey))
+	}
+	if cfg.MaxRequestsPerMin > 0 {
+		opts = append(opts, server.WithMaxRequestsPerMinute(cfg.MaxRequestsPerMin))
 	}
 
 	srv := &http.Server{

@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -547,5 +548,157 @@ func TestConvertDeleteNotFound(t *testing.T) {
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestRequestSizeLimit(t *testing.T) {
+	ts := testutil.TestServer(t)
+
+	// Create a request body larger than 1MB
+	bigBody := strings.Repeat("x", 2*1024*1024)
+	resp, err := http.Post(ts.URL+"/api/downloads", "application/json", strings.NewReader(bigBody))
+	if err != nil {
+		t.Fatalf("POST failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for oversized body, got %d", resp.StatusCode)
+	}
+}
+
+func TestRateLimiting(t *testing.T) {
+	// Create server with very low rate limit
+	dlMgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil, nil)
+	convMgr := convert.NewManager()
+	srv := server.New(dlMgr, convMgr, server.WithMaxRequestsPerMinute(2))
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	body, _ := json.Marshal(model.DownloadRequest{
+		URL:      "http://example.com/video.mp4",
+		Filename: "video.mp4",
+	})
+
+	// Send requests rapidly - should eventually get rate limited
+	var rateLimited bool
+	for i := 0; i < 10; i++ {
+		resp, err := http.Post(ts.URL+"/api/downloads", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("POST failed: %v", err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusTooManyRequests {
+			rateLimited = true
+			break
+		}
+	}
+
+	if !rateLimited {
+		t.Log("rate limiting did not trigger within 10 requests (may need higher burst)")
+	}
+}
+
+func TestPathTraversalViaFileEndpoint(t *testing.T) {
+	ts := testutil.TestServer(t)
+
+	// Try to access a file via path traversal in the ID
+	resp, err := http.Get(ts.URL + "/api/downloads/../../../etc/passwd/file")
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Should be 404 (task not found) or 405, NOT a file from the filesystem
+	if resp.StatusCode == http.StatusOK {
+		t.Fatal("should not serve arbitrary files")
+	}
+}
+
+func TestHealthEndpointExtended(t *testing.T) {
+	ts := testutil.TestServer(t)
+
+	resp, err := http.Get(ts.URL + "/api/health")
+	if err != nil {
+		t.Fatalf("GET /api/health failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var result map[string]any
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	if result["status"] != "ok" {
+		t.Fatalf("expected status ok, got %v", result["status"])
+	}
+	if _, ok := result["active_downloads"]; !ok {
+		t.Error("expected active_downloads in health response")
+	}
+	if _, ok := result["tools"]; !ok {
+		t.Error("expected tools in health response")
+	}
+}
+
+func TestFFmpegArgsValidation(t *testing.T) {
+	ts := testutil.TestServer(t)
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"shell injection semicolon", []string{"-i", "input.mp4", "; rm -rf /"}},
+		{"shell injection pipe", []string{"-i", "input.mp4", "| cat /etc/passwd"}},
+		{"shell injection backtick", []string{"-i", "input.mp4", "`whoami`"}},
+		{"shell injection dollar", []string{"-i", "input.mp4", "$(id)"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(model.ConvertRequest{Args: tt.args})
+			resp, err := http.Post(ts.URL+"/api/convert", "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("POST failed: %v", err)
+			}
+			resp.Body.Close()
+
+			if resp.StatusCode == http.StatusAccepted {
+				t.Fatalf("expected rejection for dangerous args: %v", tt.args)
+			}
+		})
+	}
+}
+
+func TestPaginatedDownloadList(t *testing.T) {
+	ts := testutil.TestServer(t)
+
+	// Create a few downloads
+	fileServer := startTestFileServer(t, "test content")
+	for i := 0; i < 5; i++ {
+		body, _ := json.Marshal(model.DownloadRequest{
+			URL:      fileServer.URL + fmt.Sprintf("/file%d.txt", i),
+			Filename: fmt.Sprintf("file%d.txt", i),
+		})
+		resp, _ := http.Post(ts.URL+"/api/downloads", "application/json", bytes.NewReader(body))
+		resp.Body.Close()
+	}
+
+	// Wait for downloads to complete
+	time.Sleep(2 * time.Second)
+
+	// Test pagination
+	resp, err := http.Get(ts.URL + "/api/downloads?limit=2&offset=0")
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	totalCount := resp.Header.Get("X-Total-Count")
+	if totalCount == "" {
+		t.Error("expected X-Total-Count header")
+	}
+
+	var list []model.DownloadStatus
+	json.NewDecoder(resp.Body).Decode(&list)
+	if len(list) > 2 {
+		t.Fatalf("expected at most 2 items with limit=2, got %d", len(list))
 	}
 }

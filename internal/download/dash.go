@@ -13,7 +13,7 @@ import (
 )
 
 // DASHDownload downloads separate video and audio streams and muxes them with ffmpeg.
-func DASHDownload(ctx context.Context, task *Task, downloadDir, tempDir string) error {
+func DASHDownload(ctx context.Context, task *Task, downloadDir, tempDir string, bandwidthLimit int64) error {
 	task.SetState(model.StateDownloading)
 
 	dir := downloadDir
@@ -21,11 +21,11 @@ func DASHDownload(ctx context.Context, task *Task, downloadDir, tempDir string) 
 		var err error
 		dir, err = safePath(downloadDir, task.req.Directory)
 		if err != nil {
-			return fmt.Errorf("invalid directory: %w", err)
+			return NewDownloadError(ErrValidation, "invalid directory", err)
 		}
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
+		return NewDownloadError(ErrFileSystem, "failed to create directory", err)
 	}
 
 	filename := filepath.Base(task.req.Filename)
@@ -37,7 +37,7 @@ func DASHDownload(ctx context.Context, task *Task, downloadDir, tempDir string) 
 	// Download video stream
 	videoTmp, err := os.CreateTemp(tempDir, "dlrelay-dash-video-*")
 	if err != nil {
-		return fmt.Errorf("failed to create video temp file: %w", err)
+		return NewDownloadError(ErrFileSystem, "failed to create video temp file", err)
 	}
 	videoPath := videoTmp.Name()
 	videoTmp.Close()
@@ -45,15 +45,15 @@ func DASHDownload(ctx context.Context, task *Task, downloadDir, tempDir string) 
 
 	task.SetProgress(0, 3) // 3 steps: video, audio, mux
 
-	if err := downloadToFile(ctx, task.req.URL, task.req.Headers, videoPath); err != nil {
-		return fmt.Errorf("failed to download video stream: %w", err)
+	if err := downloadToFile(ctx, task.req.URL, task.req.Headers, videoPath, bandwidthLimit); err != nil {
+		return NewDownloadError(ErrNetwork, "failed to download video stream", err)
 	}
 	task.SetProgress(1, 3)
 
 	// Download audio stream
 	audioTmp, err := os.CreateTemp(tempDir, "dlrelay-dash-audio-*")
 	if err != nil {
-		return fmt.Errorf("failed to create audio temp file: %w", err)
+		return NewDownloadError(ErrFileSystem, "failed to create audio temp file", err)
 	}
 	audioPath := audioTmp.Name()
 	audioTmp.Close()
@@ -62,24 +62,22 @@ func DASHDownload(ctx context.Context, task *Task, downloadDir, tempDir string) 
 	// NOTE: This passes the same headers (including cookies) to both video and audio URLs.
 	// If audio_url is on a different domain, cookies may leak cross-domain.
 	// A proper fix would require per-URL header maps in the DownloadRequest model.
-	if err := downloadToFile(ctx, task.req.AudioURL, task.req.Headers, audioPath); err != nil {
-		return fmt.Errorf("failed to download audio stream: %w", err)
+	if err := downloadToFile(ctx, task.req.AudioURL, task.req.Headers, audioPath, bandwidthLimit); err != nil {
+		return NewDownloadError(ErrNetwork, "failed to download audio stream", err)
 	}
 	task.SetProgress(2, 3)
 
 	// Mux video + audio with ffmpeg
 	if err := muxStreams(ctx, videoPath, audioPath, destPath); err != nil {
-		return fmt.Errorf("failed to mux streams: %w", err)
+		return NewDownloadError(ErrExternal, "failed to mux streams", err)
 	}
-	task.SetProgress(3, 3)
-
 	task.SetFilePath(destPath)
-	task.SetState(model.StateCompleted)
+	task.SetProgressAndState(3, 3, model.StateCompleted)
 	return nil
 }
 
 // downloadToFile downloads a URL to a file path.
-func downloadToFile(ctx context.Context, rawURL string, headers map[string]string, destPath string) error {
+func downloadToFile(ctx context.Context, rawURL string, headers map[string]string, destPath string, bandwidthLimit int64) error {
 	body, err := fetchURL(ctx, rawURL, headers)
 	if err != nil {
 		return err
@@ -92,9 +90,12 @@ func downloadToFile(ctx context.Context, rawURL string, headers map[string]strin
 	}
 	defer f.Close()
 
+	var reader io.Reader = body
+	reader = NewThrottledReader(ctx, reader, bandwidthLimit)
+
 	buf := make([]byte, 32*1024)
 	for {
-		n, readErr := body.Read(buf)
+		n, readErr := reader.Read(buf)
 		if n > 0 {
 			if _, writeErr := f.Write(buf[:n]); writeErr != nil {
 				return writeErr

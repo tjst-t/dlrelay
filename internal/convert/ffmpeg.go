@@ -17,8 +17,25 @@ import (
 
 var timeRegex = regexp.MustCompile(`time=(\d+):(\d+):(\d+)\.(\d+)`)
 
+// validateProbeHeaders rejects header names or values containing CR, LF, or null bytes.
+func validateProbeHeaders(headers map[string]string) error {
+	for k, v := range headers {
+		if strings.ContainsAny(k, "\r\n\x00") {
+			return fmt.Errorf("header name contains forbidden character: %q", k)
+		}
+		if strings.ContainsAny(v, "\r\n\x00") {
+			return fmt.Errorf("header value contains forbidden character for key %q", k)
+		}
+	}
+	return nil
+}
+
 // Probe runs ffprobe on the given input and returns the result.
 func Probe(ctx context.Context, input string, headers map[string]string) (*model.ProbeResult, error) {
+	if err := validateProbeHeaders(headers); err != nil {
+		return nil, fmt.Errorf("invalid probe headers: %w", err)
+	}
+
 	args := []string{"-v", "quiet", "-print_format", "json", "-show_format", "-show_streams"}
 	for k, v := range headers {
 		args = append(args, "-headers", fmt.Sprintf("%s: %s\r\n", k, v))

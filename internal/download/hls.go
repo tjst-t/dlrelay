@@ -18,17 +18,17 @@ import (
 )
 
 // HLSDownload downloads an HLS stream.
-func HLSDownload(ctx context.Context, task *Task, downloadDir, tempDir string) error {
+func HLSDownload(ctx context.Context, task *Task, downloadDir, tempDir string, bandwidthLimit int64) error {
 	task.SetState(model.StateDownloading)
 
 	slog.Info("starting HLS download", "url", task.req.URL)
 
 	segments, err := parseM3U8(ctx, task.req.URL, task.req.Headers)
 	if err != nil {
-		return fmt.Errorf("failed to parse M3U8: %w", err)
+		return NewDownloadError(ErrNetwork, "failed to parse M3U8", err)
 	}
 	if len(segments) == 0 {
-		return fmt.Errorf("no segments found in M3U8")
+		return NewDownloadError(ErrValidation, "no segments found in M3U8", nil)
 	}
 
 	slog.Info("HLS playlist parsed", "url", task.req.URL, "segments", len(segments))
@@ -38,11 +38,11 @@ func HLSDownload(ctx context.Context, task *Task, downloadDir, tempDir string) e
 		var err error
 		dir, err = safePath(downloadDir, task.req.Directory)
 		if err != nil {
-			return fmt.Errorf("invalid directory: %w", err)
+			return NewDownloadError(ErrValidation, "invalid directory", err)
 		}
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
+		return NewDownloadError(ErrFileSystem, "failed to create directory", err)
 	}
 
 	filename := filepath.Base(task.req.Filename)
@@ -58,7 +58,7 @@ func HLSDownload(ctx context.Context, task *Task, downloadDir, tempDir string) e
 
 	tmpFile, err := os.CreateTemp(tempDir, "dlrelay-hls-*.ts")
 	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
+		return NewDownloadError(ErrFileSystem, "failed to create temp file", err)
 	}
 	tmpPath := tmpFile.Name()
 	defer func() {
@@ -69,22 +69,21 @@ func HLSDownload(ctx context.Context, task *Task, downloadDir, tempDir string) e
 	// Track actual bytes downloaded for accurate progress reporting.
 	var bytesDownloaded int64
 	totalSegments := len(segments)
-	// Estimate total bytes for progress display: assume 500KB per segment.
-	estimatedTotal := int64(totalSegments) * 500 * 1024
-	task.SetProgress(0, estimatedTotal)
+	// Start with 0 estimated total — update after first segment
+	task.SetProgress(0, 0)
 
 	for i, segURL := range segments {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		n, err := downloadSegmentCounted(ctx, segURL, task.req.Headers, tmpFile)
+		n, err := downloadSegmentCounted(ctx, segURL, task.req.Headers, tmpFile, bandwidthLimit)
 		if err != nil {
-			return fmt.Errorf("failed to download segment %d/%d: %w", i+1, totalSegments, err)
+			return NewDownloadError(ErrNetwork, fmt.Sprintf("failed to download segment %d/%d", i+1, totalSegments), err)
 		}
 		bytesDownloaded += n
 		// Update estimate based on average segment size so far
 		avgSegSize := bytesDownloaded / int64(i+1)
-		estimatedTotal = avgSegSize * int64(totalSegments)
+		estimatedTotal := avgSegSize * int64(totalSegments)
 		task.SetProgress(bytesDownloaded, estimatedTotal)
 	}
 
@@ -116,7 +115,7 @@ func HLSDownload(ctx context.Context, task *Task, downloadDir, tempDir string) e
 
 	task.SetFilePath(destPath)
 	slog.Info("HLS download completed", "url", task.req.URL, "file", destPath)
-	task.SetState(model.StateCompleted)
+	task.SetProgressAndState(bytesDownloaded, bytesDownloaded, model.StateCompleted)
 	return nil
 }
 
@@ -199,12 +198,7 @@ func resolveURL(base *url.URL, ref string) string {
 	return base.ResolveReference(refURL).String()
 }
 
-func downloadSegment(ctx context.Context, segURL string, headers map[string]string, w io.Writer) error {
-	_, err := downloadSegmentCounted(ctx, segURL, headers, w)
-	return err
-}
-
-func downloadSegmentCounted(ctx context.Context, segURL string, headers map[string]string, w io.Writer) (int64, error) {
+func downloadSegmentCounted(ctx context.Context, segURL string, headers map[string]string, w io.Writer, bandwidthLimit int64) (int64, error) {
 	// Retry with exponential backoff for transient CDN failures
 	const maxRetries = 6
 	var lastErr error
@@ -226,7 +220,9 @@ func downloadSegmentCounted(ctx context.Context, segURL string, headers map[stri
 			lastErr = err
 			continue
 		}
-		n, err := io.Copy(w, body)
+		var reader io.Reader = body
+		reader = NewThrottledReader(segCtx, reader, bandwidthLimit)
+		n, err := io.Copy(w, reader)
 		body.Close()
 		cancel()
 		if err != nil {

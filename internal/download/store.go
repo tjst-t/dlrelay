@@ -6,20 +6,23 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/tjst-t/dlrelay/internal/model"
 )
 
 // Record is a persistent download record saved to disk.
 type Record struct {
-	ID       string                `json:"id"`
-	Request  model.DownloadRequest `json:"request"`
-	State    model.DownloadState   `json:"state"`
-	FilePath string                `json:"file_path,omitempty"`
-	Error    string                `json:"error,omitempty"`
-	SkipInfo string                `json:"skip_info,omitempty"`
-	Bytes    int64                 `json:"bytes_received"`
-	Total    int64                 `json:"total_bytes"`
+	ID        string                `json:"id"`
+	Request   model.DownloadRequest `json:"request"`
+	State     model.DownloadState   `json:"state"`
+	FilePath  string                `json:"file_path,omitempty"`
+	Error     string                `json:"error,omitempty"`
+	SkipInfo  string                `json:"skip_info,omitempty"`
+	Bytes     int64                 `json:"bytes_received"`
+	Total     int64                 `json:"total_bytes"`
+	CreatedAt time.Time             `json:"created_at,omitempty"`
+	TempPath  string                `json:"temp_path,omitempty"`
 }
 
 // Store persists download records to a JSON file.
@@ -54,7 +57,7 @@ func (s *Store) Load() ([]Record, error) {
 	return records, nil
 }
 
-// Save writes all records to disk atomically.
+// Save writes all records to disk atomically with fsync and backup.
 func (s *Store) Save(records []Record) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -70,12 +73,41 @@ func (s *Store) Save(records []Record) {
 		return
 	}
 
+	// Backup existing file before overwriting
+	if _, err := os.Stat(s.path); err == nil {
+		bakPath := s.path + ".bak"
+		if copyErr := copyFileSimple(s.path, bakPath); copyErr != nil {
+			slog.Warn("failed to create store backup", "err", copyErr)
+		}
+	}
+
 	tmpPath := s.path + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+	f, err := os.Create(tmpPath)
+	if err != nil {
+		slog.Error("failed to create temp store file", "err", err)
+		return
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		os.Remove(tmpPath)
 		slog.Error("failed to write download store", "err", err)
 		return
 	}
+	// Fsync to ensure data is flushed to disk
+	if err := f.Sync(); err != nil {
+		slog.Warn("failed to fsync download store", "err", err)
+	}
+	f.Close()
+
 	if err := os.Rename(tmpPath, s.path); err != nil {
 		slog.Error("failed to rename download store", "err", err)
 	}
+}
+
+func copyFileSimple(src, dst string) error {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, data, 0o644)
 }

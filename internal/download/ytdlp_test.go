@@ -34,7 +34,7 @@ func TestYtdlpDownload(t *testing.T) {
 	defer cancel()
 
 	task := NewTask("test-ytdlp-1", req, cancel)
-	err := YtdlpDownload(ctx, task, dir)
+	err := YtdlpDownload(ctx, task, dir, 0)
 	if err != nil {
 		t.Fatalf("YtdlpDownload failed: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestYtdlpDownloadCancel(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- YtdlpDownload(ctx, task, dir)
+		done <- YtdlpDownload(ctx, task, dir, 0)
 	}()
 
 	// Cancel after a short delay
@@ -112,7 +112,7 @@ func TestYtdlpInvalidURL(t *testing.T) {
 	defer cancel()
 
 	task := NewTask("test-ytdlp-invalid", req, cancel)
-	err := YtdlpDownload(ctx, task, dir)
+	err := YtdlpDownload(ctx, task, dir, 0)
 	if err == nil {
 		t.Fatal("expected error for invalid video URL")
 	}

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -335,6 +336,132 @@ func TestNoSkipWhenNoMatch(t *testing.T) {
 	status, _ := mgr.Get(id)
 	if status.State != model.StateCompleted {
 		t.Fatalf("expected completed (no match to skip), got %s", status.State)
+	}
+}
+
+func TestConcurrentSubmitAndCancel(t *testing.T) {
+	fileServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "1000000")
+		for i := 0; i < 100; i++ {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-time.After(50 * time.Millisecond):
+				w.Write([]byte("x"))
+			}
+		}
+	}))
+	defer fileServer.Close()
+
+	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil, nil)
+
+	// Concurrently submit and cancel tasks
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			id, err := mgr.Submit(model.DownloadRequest{
+				URL:      fileServer.URL + fmt.Sprintf("/file%d.bin", i),
+				Filename: fmt.Sprintf("file%d.bin", i),
+			})
+			if err != nil {
+				return
+			}
+			// Cancel after brief delay
+			time.Sleep(50 * time.Millisecond)
+			mgr.Delete(id)
+		}(i)
+	}
+	wg.Wait()
+}
+
+func TestConcurrentListAndSubmit(t *testing.T) {
+	fileServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("content"))
+	}))
+	defer fileServer.Close()
+
+	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil, nil)
+
+	var wg sync.WaitGroup
+
+	// Concurrent lists
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 10; j++ {
+				mgr.List()
+			}
+		}()
+	}
+
+	// Concurrent submits
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			id, err := mgr.Submit(model.DownloadRequest{
+				URL:      fileServer.URL + fmt.Sprintf("/file%d.bin", i),
+				Filename: fmt.Sprintf("file%d.bin", i),
+			})
+			if err != nil {
+				return
+			}
+			// Clean up
+			time.Sleep(500 * time.Millisecond)
+			mgr.Delete(id)
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+func TestTaskCleanup(t *testing.T) {
+	fileServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("test"))
+	}))
+	defer fileServer.Close()
+
+	mgr := download.NewManager(t.TempDir(), t.TempDir(), 3, nil, nil)
+	mgr.SetMaxCompletedTasks(3) // Very low limit for testing
+
+	// Submit several downloads
+	for i := 0; i < 6; i++ {
+		_, err := mgr.Submit(model.DownloadRequest{
+			URL:      fileServer.URL + fmt.Sprintf("/file%d.bin", i),
+			Filename: fmt.Sprintf("file%d.bin", i),
+		})
+		if err != nil {
+			t.Fatalf("Submit %d failed: %v", i, err)
+		}
+	}
+
+	// Wait for all to complete
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		list := mgr.List()
+		allDone := true
+		for _, s := range list {
+			if s.State == model.StateQueued || s.State == model.StateDownloading {
+				allDone = false
+				break
+			}
+		}
+		if allDone && len(list) > 0 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// Force a persist/cleanup cycle by triggering a state change
+	// The cleanup happens during schedulePersist
+	time.Sleep(2 * time.Second) // Wait for debounced persist
+
+	list := mgr.List()
+	if len(list) > 3 {
+		t.Errorf("expected at most 3 tasks after cleanup, got %d", len(list))
 	}
 }
 

@@ -106,7 +106,7 @@ func YtdlpFilename(ctx context.Context, req model.DownloadRequest) (string, erro
 }
 
 // YtdlpDownload uses yt-dlp to download a video from a page URL.
-func YtdlpDownload(ctx context.Context, task *Task, downloadDir string) error {
+func YtdlpDownload(ctx context.Context, task *Task, downloadDir string, bandwidthLimit int64) error {
 	task.SetState(model.StateDownloading)
 
 	// Determine output directory
@@ -143,6 +143,7 @@ func YtdlpDownload(ctx context.Context, task *Task, downloadDir string) error {
 		"--newline", // Output progress on separate lines
 		"-o", outTemplate,
 		"--no-overwrites",
+		"--continue",                        // Resume partially downloaded files
 		"--merge-output-format", "mp4",
 		"--js-runtimes", "node",
 		"--remote-components", "ejs:github", // YouTube n-challenge solver script
@@ -157,6 +158,11 @@ func YtdlpDownload(ctx context.Context, task *Task, downloadDir string) error {
 		return fmt.Errorf("invalid quality format selector: %q", quality)
 	}
 	args = append(args, "-f", quality)
+
+	// Apply bandwidth limit via yt-dlp's --limit-rate
+	if bandwidthLimit > 0 {
+		args = append(args, "--limit-rate", fmt.Sprintf("%d", bandwidthLimit))
+	}
 
 	// Write a Netscape-format cookie file if Cookie header is present.
 	// yt-dlp's extractors use an internal cookiejar — passing cookies via

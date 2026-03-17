@@ -38,4 +38,5 @@ type DownloadStatus struct {
 	FilePath      string        `json:"-"`
 	Error         *string       `json:"error"`
 	SkipInfo      string        `json:"skip_info,omitempty"`
+	CreatedAt     int64         `json:"created_at,omitempty"` // Unix timestamp
 }

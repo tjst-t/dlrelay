@@ -3,6 +3,7 @@ package download
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/tjst-t/dlrelay/internal/model"
 )
@@ -20,6 +21,8 @@ type Task struct {
 	filePath      string
 	skipInfo      string
 	forceDownload bool
+	createdAt     time.Time
+	tempPath      string
 	cancel        context.CancelFunc
 	onChange      func()
 }
@@ -27,11 +30,12 @@ type Task struct {
 // NewTask creates a new download task.
 func NewTask(id string, req model.DownloadRequest, cancel context.CancelFunc) *Task {
 	return &Task{
-		id:     id,
-		url:    req.URL,
-		req:    req,
-		state:  model.StateQueued,
-		cancel: cancel,
+		id:        id,
+		url:       req.URL,
+		req:       req,
+		state:     model.StateQueued,
+		createdAt: time.Now(),
+		cancel:    cancel,
 	}
 }
 
@@ -47,11 +51,29 @@ func (t *Task) SetState(state model.DownloadState) {
 }
 
 // SetProgress updates the bytes received and total.
+// Triggers onChange to persist progress periodically (debounced to ~1s).
 func (t *Task) SetProgress(received, total int64) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
 	t.bytes = received
 	t.total = total
+	cb := t.onChange
+	t.mu.Unlock()
+	if cb != nil {
+		cb()
+	}
+}
+
+// SetProgressAndState atomically updates progress and state together.
+func (t *Task) SetProgressAndState(received, total int64, state model.DownloadState) {
+	t.mu.Lock()
+	t.bytes = received
+	t.total = total
+	t.state = state
+	cb := t.onChange
+	t.mu.Unlock()
+	if cb != nil {
+		cb()
+	}
 }
 
 // SetError sets the error message and marks the task as failed.
@@ -73,6 +95,17 @@ func (t *Task) SetFilePath(path string) {
 	t.filePath = path
 }
 
+// SetTempPath sets the temporary file path during download.
+func (t *Task) SetTempPath(path string) {
+	t.mu.Lock()
+	t.tempPath = path
+	cb := t.onChange
+	t.mu.Unlock()
+	if cb != nil {
+		cb()
+	}
+}
+
 // ResetForRetry resets the task state to retry with a different URL.
 func (t *Task) ResetForRetry(newURL string) {
 	t.mu.Lock()
@@ -86,6 +119,7 @@ func (t *Task) ResetForRetry(newURL string) {
 	t.total = 0
 	t.err = ""
 	t.filePath = ""
+	t.tempPath = ""
 }
 
 // Cancel cancels the download task.
@@ -127,5 +161,6 @@ func (t *Task) Status() model.DownloadStatus {
 		FilePath:      t.filePath,
 		Error:         errPtr,
 		SkipInfo:      t.skipInfo,
+		CreatedAt:     t.createdAt.Unix(),
 	}
 }

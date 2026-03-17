@@ -2,6 +2,7 @@ package download
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -32,41 +33,20 @@ func safePath(baseDir, subDir string) (string, error) {
 	return abs, nil
 }
 
-// HTTPDownload performs a plain HTTP download.
-func HTTPDownload(ctx context.Context, task *Task, downloadDir, tempDir string) error {
+// HTTPDownload performs a plain HTTP download with optional resume support.
+func HTTPDownload(ctx context.Context, task *Task, downloadDir, tempDir string, resumeFrom int64, bandwidthLimit int64) (downloadErr error) {
 	task.SetState(model.StateDownloading)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, task.req.URL, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	for k, v := range task.req.Headers {
-		req.Header.Set(k, v)
-	}
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("HTTP request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("HTTP status %d", resp.StatusCode)
-	}
-
-	totalBytes, _ := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
-	task.SetProgress(0, totalBytes)
 
 	dir := downloadDir
 	if task.req.Directory != "" {
 		var err error
 		dir, err = safePath(downloadDir, task.req.Directory)
 		if err != nil {
-			return fmt.Errorf("invalid directory: %w", err)
+			return NewDownloadError(ErrValidation, "invalid directory", err)
 		}
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
+		return NewDownloadError(ErrFileSystem, "failed to create directory", err)
 	}
 
 	filename := filepath.Base(task.req.Filename)
@@ -76,23 +56,111 @@ func HTTPDownload(ctx context.Context, task *Task, downloadDir, tempDir string) 
 	destPath := filepath.Join(dir, filename)
 	destPath = uniquePath(destPath)
 
-	tmpFile, err := os.CreateTemp(tempDir, "dlrelay-dl-*")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
+	// Handle resume: reuse existing temp file or create new one
+	var tmpFile *os.File
+	var tmpPath string
+	var written int64
+
+	task.mu.RLock()
+	existingTempPath := task.tempPath
+	task.mu.RUnlock()
+
+	if resumeFrom > 0 && existingTempPath != "" {
+		// Try to resume from existing temp file
+		var err error
+		tmpFile, err = os.OpenFile(existingTempPath, os.O_WRONLY|os.O_APPEND, 0o644)
+		if err != nil {
+			// Can't resume, start fresh
+			resumeFrom = 0
+		} else {
+			tmpPath = existingTempPath
+			written = resumeFrom
+		}
 	}
-	tmpPath := tmpFile.Name()
+
+	if tmpFile == nil {
+		var err error
+		tmpFile, err = os.CreateTemp(tempDir, "dlrelay-dl-*")
+		if err != nil {
+			return NewDownloadError(ErrFileSystem, "failed to create temp file", err)
+		}
+		tmpPath = tmpFile.Name()
+		resumeFrom = 0
+		written = 0
+	}
+
+	task.SetTempPath(tmpPath)
 	defer func() {
 		tmpFile.Close()
-		os.Remove(tmpPath)
+		// Keep temp file on network/transient errors so retry can resume.
+		// Only remove on success or validation/filesystem errors where resume won't help.
+		if downloadErr == nil {
+			os.Remove(tmpPath)
+		} else {
+			var dlErr *DownloadError
+			if errors.As(downloadErr, &dlErr) && (dlErr.Kind == ErrValidation || dlErr.Kind == ErrFileSystem) {
+				os.Remove(tmpPath)
+				task.SetTempPath("")
+			}
+			// Network errors: keep temp file for resume on retry
+		}
 	}()
 
-	var written int64
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, task.req.URL, nil)
+	if err != nil {
+		return NewDownloadError(ErrNetwork, "failed to create request", err)
+	}
+	for k, v := range task.req.Headers {
+		req.Header.Set(k, v)
+	}
+
+	// Add Range header for resume
+	if resumeFrom > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", resumeFrom))
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return NewDownloadError(ErrNetwork, "HTTP request failed", err)
+	}
+	defer resp.Body.Close()
+
+	// Handle resume response
+	if resumeFrom > 0 {
+		if resp.StatusCode == http.StatusPartialContent {
+			// Server supports resume, continue from where we left off
+		} else if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			// Server doesn't support resume, start over
+			tmpFile.Close()
+			tmpFile, err = os.Create(tmpPath)
+			if err != nil {
+				return NewDownloadError(ErrFileSystem, "failed to recreate temp file", err)
+			}
+			written = 0
+		} else {
+			return NewDownloadError(ErrNetwork, fmt.Sprintf("HTTP status %d", resp.StatusCode), nil)
+		}
+	} else {
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return NewDownloadError(ErrNetwork, fmt.Sprintf("HTTP status %d", resp.StatusCode), nil)
+		}
+	}
+
+	totalBytes, _ := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
+	if totalBytes > 0 && resumeFrom > 0 && resp.StatusCode == http.StatusPartialContent {
+		totalBytes += resumeFrom
+	}
+	task.SetProgress(written, totalBytes)
+
+	var body io.Reader = resp.Body
+	body = NewThrottledReader(ctx, body, bandwidthLimit)
+
 	buf := make([]byte, 32*1024)
 	for {
-		n, readErr := resp.Body.Read(buf)
+		n, readErr := body.Read(buf)
 		if n > 0 {
 			if _, writeErr := tmpFile.Write(buf[:n]); writeErr != nil {
-				return fmt.Errorf("failed to write: %w", writeErr)
+				return NewDownloadError(ErrFileSystem, "failed to write", writeErr)
 			}
 			written += int64(n)
 			task.SetProgress(written, totalBytes)
@@ -101,20 +169,21 @@ func HTTPDownload(ctx context.Context, task *Task, downloadDir, tempDir string) 
 			if readErr == io.EOF {
 				break
 			}
-			return fmt.Errorf("read error: %w", readErr)
+			return NewDownloadError(ErrNetwork, "read error", readErr)
 		}
 	}
 
 	tmpFile.Close()
+	task.SetTempPath("") // Clear temp path on successful completion
 	if err := os.Rename(tmpPath, destPath); err != nil {
 		// Cross-device: copy instead
 		if copyErr := copyFile(tmpPath, destPath); copyErr != nil {
-			return fmt.Errorf("failed to move file: %w", copyErr)
+			return NewDownloadError(ErrFileSystem, "failed to move file", copyErr)
 		}
 	}
 
 	task.SetFilePath(destPath)
-	task.SetState(model.StateCompleted)
+	task.SetProgressAndState(written, totalBytes, model.StateCompleted)
 	return nil
 }
 

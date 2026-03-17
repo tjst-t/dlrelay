@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -58,11 +59,32 @@ func ValidateDownloadURL(rawURL string) error {
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
 	}
+
+	// Normalize scheme to lowercase
+	u.Scheme = strings.ToLower(u.Scheme)
+
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("unsupported URL scheme %q: only http and https are allowed", u.Scheme)
 	}
 	if u.Host == "" {
 		return fmt.Errorf("URL has no host")
 	}
+
+	// Reject URLs with user info (user:pass@host)
+	if u.User != nil {
+		return fmt.Errorf("URLs with user credentials are not allowed")
+	}
+
 	return nil
+}
+
+// NormalizeURL cleans up a URL by normalizing scheme case and removing fragments.
+func NormalizeURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	u.Scheme = strings.ToLower(u.Scheme)
+	u.Fragment = "" // Remove fragment
+	return u.String()
 }

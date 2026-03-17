@@ -1,7 +1,9 @@
 package server
 
 import (
+	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -26,26 +28,32 @@ func expandHome(path string) string {
 
 // Config holds server configuration.
 type Config struct {
-	ListenAddr    string
-	DownloadDir   string
-	TempDir       string
-	MaxConcurrent int
-	ExtensionDir  string
-	APIKey        string
-	DownloadRules []download.Rule
-	CheckDirs     []string
+	ListenAddr         string
+	DownloadDir        string
+	TempDir            string
+	MaxConcurrent      int
+	ExtensionDir       string
+	APIKey             string
+	DownloadRules      []download.Rule
+	CheckDirs          []string
+	MaxRequestsPerMin  int
+	MaxCompletedTasks  int
+	BandwidthLimit     int64 // bytes per second, 0 = unlimited
 }
 
 // tomlConfig is the TOML file representation.
 type tomlConfig struct {
-	ListenAddr    string            `toml:"listen_addr"`
-	DownloadDir   string            `toml:"download_dir"`
-	TempDir       string            `toml:"temp_dir"`
-	MaxConcurrent int               `toml:"max_concurrent"`
-	ExtensionDir  string            `toml:"extension_dir"`
-	APIKey        string            `toml:"api_key"`
-	CheckDirs     []string          `toml:"check_dirs"`
-	DownloadRules []tomlDownloadRule `toml:"download_rules"`
+	ListenAddr        string            `toml:"listen_addr"`
+	DownloadDir       string            `toml:"download_dir"`
+	TempDir           string            `toml:"temp_dir"`
+	MaxConcurrent     int               `toml:"max_concurrent"`
+	ExtensionDir      string            `toml:"extension_dir"`
+	APIKey            string            `toml:"api_key"`
+	CheckDirs         []string          `toml:"check_dirs"`
+	DownloadRules     []tomlDownloadRule `toml:"download_rules"`
+	MaxRequestsPerMin int               `toml:"max_requests_per_minute"`
+	MaxCompletedTasks int               `toml:"max_completed_tasks"`
+	BandwidthLimit    int64             `toml:"bandwidth_limit"`
 }
 
 type tomlDownloadRule struct {
@@ -57,10 +65,12 @@ type tomlDownloadRule struct {
 // then applies environment variable overrides. Env vars always take precedence.
 func LoadConfig() Config {
 	c := Config{
-		ListenAddr:    ":8090",
-		DownloadDir:   "/downloads",
-		TempDir:       os.TempDir(),
-		MaxConcurrent: 3,
+		ListenAddr:        ":8090",
+		DownloadDir:       "/downloads",
+		TempDir:           os.TempDir(),
+		MaxConcurrent:     3,
+		MaxRequestsPerMin: 60,
+		MaxCompletedTasks: 500,
 	}
 
 	// Load TOML config file if available
@@ -105,6 +115,21 @@ func LoadConfig() Config {
 			}
 		}
 	}
+	if v := os.Getenv("MAX_REQUESTS_PER_MINUTE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			c.MaxRequestsPerMin = n
+		}
+	}
+	if v := os.Getenv("MAX_COMPLETED_TASKS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			c.MaxCompletedTasks = n
+		}
+	}
+	if v := os.Getenv("BANDWIDTH_LIMIT"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
+			c.BandwidthLimit = n
+		}
+	}
 
 	// Expand ~ in all path fields
 	c.DownloadDir = expandHome(c.DownloadDir)
@@ -118,6 +143,33 @@ func LoadConfig() Config {
 	}
 
 	return c
+}
+
+// ValidateConfig checks the configuration for errors.
+func ValidateConfig(c Config) error {
+	// Validate listen address
+	if c.ListenAddr != "" {
+		_, portStr, err := net.SplitHostPort(c.ListenAddr)
+		if err != nil {
+			return fmt.Errorf("invalid listen address %q: %w", c.ListenAddr, err)
+		}
+		port, err := strconv.Atoi(portStr)
+		if err != nil || port < 0 || port > 65535 {
+			return fmt.Errorf("listen port must be 0-65535, got %q", portStr)
+		}
+	}
+
+	// Validate API key length if set
+	if c.APIKey != "" && len(c.APIKey) < 8 {
+		return fmt.Errorf("API key must be at least 8 characters for security")
+	}
+
+	// Validate MaxConcurrent
+	if c.MaxConcurrent < 1 {
+		return fmt.Errorf("max_concurrent must be at least 1")
+	}
+
+	return nil
 }
 
 // loadConfigFile reads a TOML config file and applies values to c.
@@ -162,6 +214,15 @@ func loadConfigFile(c *Config, path string) {
 				})
 			}
 		}
+	}
+	if tc.MaxRequestsPerMin > 0 {
+		c.MaxRequestsPerMin = tc.MaxRequestsPerMin
+	}
+	if tc.MaxCompletedTasks > 0 {
+		c.MaxCompletedTasks = tc.MaxCompletedTasks
+	}
+	if tc.BandwidthLimit > 0 {
+		c.BandwidthLimit = tc.BandwidthLimit
 	}
 }
 

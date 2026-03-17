@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -21,29 +23,47 @@ type Rule struct {
 
 // Manager manages concurrent download tasks.
 type Manager struct {
-	tasks        sync.Map
-	sem          chan struct{}
-	downloadDir  string
-	tempDir      string
-	rules        []Rule
-	checkDirs    []string
-	store        *Store
-	persistTimer *time.Timer
-	persistMu    sync.Mutex
+	tasks             sync.Map
+	sem               chan struct{}
+	downloadDir       string
+	tempDir           string
+	rules             []Rule
+	checkDirs         []string
+	store             *Store
+	persistTimer      *time.Timer
+	persistMu         sync.Mutex
+	maxCompletedTasks int
+	bandwidthLimit    int64 // bytes per second, 0 = unlimited
 }
 
 // NewManager creates a new download manager.
 func NewManager(downloadDir, tempDir string, maxConcurrent int, rules []Rule, checkDirs []string) *Manager {
 	m := &Manager{
-		sem:         make(chan struct{}, maxConcurrent),
-		downloadDir: downloadDir,
-		tempDir:     tempDir,
-		rules:       rules,
-		checkDirs:   checkDirs,
-		store:       NewStore(downloadDir),
+		sem:               make(chan struct{}, maxConcurrent),
+		downloadDir:       downloadDir,
+		tempDir:           tempDir,
+		rules:             rules,
+		checkDirs:         checkDirs,
+		store:             NewStore(downloadDir),
+		maxCompletedTasks: 500,
 	}
 	m.loadAndResume()
 	return m
+}
+
+// SetMaxCompletedTasks sets the maximum number of completed tasks to retain.
+func (m *Manager) SetMaxCompletedTasks(n int) {
+	m.maxCompletedTasks = n
+}
+
+// SetBandwidthLimit sets the download bandwidth limit in bytes per second.
+func (m *Manager) SetBandwidthLimit(bytesPerSec int64) {
+	m.bandwidthLimit = bytesPerSec
+}
+
+// BandwidthLimit returns the configured bandwidth limit.
+func (m *Manager) BandwidthLimit() int64 {
+	return m.bandwidthLimit
 }
 
 // resolveDownloadDir returns the download directory for the given URL,
@@ -87,20 +107,26 @@ func (m *Manager) loadAndResume() {
 	}
 
 	for _, rec := range records {
+		createdAt := rec.CreatedAt
+		if createdAt.IsZero() {
+			createdAt = time.Now()
+		}
+
 		switch rec.State {
 		case model.StateCompleted, model.StateFailed, model.StateCancelled, model.StateSkipped:
 			// Restore finished tasks as-is (no goroutine needed)
 			task := &Task{
-				id:       rec.ID,
-				url:      rec.Request.URL,
-				req:      rec.Request,
-				state:    rec.State,
-				bytes:    rec.Bytes,
-				total:    rec.Total,
-				err:      rec.Error,
-				filePath: rec.FilePath,
-				skipInfo: rec.SkipInfo,
-				cancel:   func() {}, // no-op for finished tasks
+				id:        rec.ID,
+				url:       rec.Request.URL,
+				req:       rec.Request,
+				state:     rec.State,
+				bytes:     rec.Bytes,
+				total:     rec.Total,
+				err:       rec.Error,
+				filePath:  rec.FilePath,
+				skipInfo:  rec.SkipInfo,
+				createdAt: createdAt,
+				cancel:    func() {}, // no-op for finished tasks
 			}
 			m.tasks.Store(rec.ID, task)
 
@@ -109,10 +135,20 @@ func (m *Manager) loadAndResume() {
 			slog.Info("resuming download", "id", rec.ID, "url", rec.Request.URL)
 			ctx, cancel := context.WithCancel(context.Background())
 			task := NewTask(rec.ID, rec.Request, cancel)
+			task.createdAt = createdAt
+			task.tempPath = rec.TempPath
 			task.onChange = func() { m.schedulePersist() }
 			m.tasks.Store(rec.ID, task)
 
-			go m.executeDownload(ctx, task, rec.Request)
+			resumeFrom := int64(0)
+			if rec.TempPath != "" {
+				if info, err := os.Stat(rec.TempPath); err == nil {
+					resumeFrom = info.Size()
+					slog.Info("resuming from partial file", "id", rec.ID, "bytes", resumeFrom)
+				}
+			}
+
+			go m.executeDownload(ctx, task, rec.Request, resumeFrom)
 		}
 	}
 
@@ -179,7 +215,7 @@ func (m *Manager) searchDirs(dlDir string) []string {
 }
 
 // executeDownload runs the appropriate download handler for the request.
-func (m *Manager) executeDownload(ctx context.Context, task *Task, req model.DownloadRequest) {
+func (m *Manager) executeDownload(ctx context.Context, task *Task, req model.DownloadRequest, resumeFrom int64) {
 	if ctx.Err() != nil {
 		return
 	}
@@ -214,17 +250,17 @@ func (m *Manager) executeDownload(ctx context.Context, task *Task, req model.Dow
 	var err error
 	switch {
 	case req.Method == "ytdlp":
-		err = YtdlpDownload(ctx, task, dlDir)
+		err = YtdlpDownload(ctx, task, dlDir, m.bandwidthLimit)
 		// Fallback: if yt-dlp fails and a fallback URL is available, retry with it
 		if err != nil && ctx.Err() == nil && req.FallbackURL != "" {
 			slog.Info("yt-dlp failed, trying fallback URL", "url", req.FallbackURL, "ytdlp_err", err)
 			task.ResetForRetry(req.FallbackURL)
-			err = m.downloadByURL(ctx, task, req.FallbackURL, dlDir)
+			err = m.downloadByURL(ctx, task, req.FallbackURL, dlDir, 0)
 		}
 	case req.AudioURL != "":
-		err = DASHDownload(ctx, task, dlDir, m.tempDir)
+		err = DASHDownload(ctx, task, dlDir, m.tempDir, m.bandwidthLimit)
 	default:
-		err = m.downloadByURL(ctx, task, req.URL, dlDir)
+		err = m.downloadByURL(ctx, task, req.URL, dlDir, resumeFrom)
 	}
 
 	if err != nil && ctx.Err() == nil {
@@ -233,22 +269,65 @@ func (m *Manager) executeDownload(ctx context.Context, task *Task, req model.Dow
 }
 
 // downloadByURL picks the right downloader (HLS or HTTP) based on the URL.
-func (m *Manager) downloadByURL(ctx context.Context, task *Task, url string, dlDir string) error {
+func (m *Manager) downloadByURL(ctx context.Context, task *Task, url string, dlDir string, resumeFrom int64) error {
 	urlLower := strings.ToLower(url)
 	if strings.Contains(urlLower, ".m3u8") || strings.Contains(urlLower, "m3u8") {
-		return HLSDownload(ctx, task, dlDir, m.tempDir)
+		return HLSDownload(ctx, task, dlDir, m.tempDir, m.bandwidthLimit)
 	}
-	return HTTPDownload(ctx, task, dlDir, m.tempDir)
+	return HTTPDownload(ctx, task, dlDir, m.tempDir, resumeFrom, m.bandwidthLimit)
+}
+
+// cleanup removes old completed/failed/cancelled/skipped tasks beyond maxCompletedTasks.
+func (m *Manager) cleanup() {
+	type taskEntry struct {
+		id        string
+		createdAt time.Time
+	}
+	var finished []taskEntry
+	m.tasks.Range(func(key, v any) bool {
+		t := v.(*Task)
+		t.mu.RLock()
+		state := t.state
+		created := t.createdAt
+		t.mu.RUnlock()
+		switch state {
+		case model.StateCompleted, model.StateFailed, model.StateCancelled, model.StateSkipped:
+			finished = append(finished, taskEntry{id: key.(string), createdAt: created})
+		}
+		return true
+	})
+
+	if len(finished) <= m.maxCompletedTasks {
+		return
+	}
+
+	// Sort by createdAt ascending (oldest first)
+	sort.Slice(finished, func(i, j int) bool {
+		return finished[i].createdAt.Before(finished[j].createdAt)
+	})
+
+	toRemove := len(finished) - m.maxCompletedTasks
+	for i := 0; i < toRemove; i++ {
+		m.tasks.Delete(finished[i].id)
+	}
+	slog.Info("cleaned up old tasks", "removed", toRemove)
 }
 
 // schedulePersist debounces persist calls, writing at most once per second.
+// Safe to call at high frequency (e.g. from SetProgress every 32KB) —
+// only the first call in each 1-second window actually schedules a timer.
 func (m *Manager) schedulePersist() {
 	m.persistMu.Lock()
 	defer m.persistMu.Unlock()
+	// If a timer is already pending, skip — it will capture latest state when it fires.
 	if m.persistTimer != nil {
-		m.persistTimer.Stop()
+		return
 	}
 	m.persistTimer = time.AfterFunc(time.Second, func() {
+		m.persistMu.Lock()
+		m.persistTimer = nil
+		m.persistMu.Unlock()
+		m.cleanup()
 		m.persist()
 	})
 }
@@ -273,14 +352,16 @@ func (m *Manager) persist() {
 			req.Headers = safe
 		}
 		rec := Record{
-			ID:       t.id,
-			Request:  req,
-			State:    t.state,
-			FilePath: t.filePath,
-			Error:    t.err,
-			SkipInfo: t.skipInfo,
-			Bytes:    t.bytes,
-			Total:    t.total,
+			ID:        t.id,
+			Request:   req,
+			State:     t.state,
+			FilePath:  t.filePath,
+			Error:     t.err,
+			SkipInfo:  t.skipInfo,
+			Bytes:     t.bytes,
+			Total:     t.total,
+			CreatedAt: t.createdAt,
+			TempPath:  t.tempPath,
 		}
 		t.mu.RUnlock()
 		records = append(records, rec)
@@ -291,10 +372,12 @@ func (m *Manager) persist() {
 
 // Submit creates and starts a new download task.
 func (m *Manager) Submit(req model.DownloadRequest) (string, error) {
+	req.URL = NormalizeURL(req.URL)
 	if err := ValidateDownloadURL(req.URL); err != nil {
 		return "", fmt.Errorf("invalid URL: %w", err)
 	}
 	if req.AudioURL != "" {
+		req.AudioURL = NormalizeURL(req.AudioURL)
 		if err := ValidateDownloadURL(req.AudioURL); err != nil {
 			return "", fmt.Errorf("invalid audio URL: %w", err)
 		}
@@ -307,7 +390,7 @@ func (m *Manager) Submit(req model.DownloadRequest) (string, error) {
 	m.tasks.Store(id, task)
 	m.persist()
 
-	go m.executeDownload(ctx, task, req)
+	go m.executeDownload(ctx, task, req, 0)
 
 	return id, nil
 }
@@ -329,6 +412,35 @@ func (m *Manager) List() []model.DownloadStatus {
 		return true
 	})
 	return result
+}
+
+// ListPaginated returns a paginated and optionally filtered list of download tasks.
+func (m *Manager) ListPaginated(offset, limit int, state string) ([]model.DownloadStatus, int) {
+	var all []model.DownloadStatus
+	m.tasks.Range(func(_, v any) bool {
+		s := v.(*Task).Status()
+		if state != "" && string(s.State) != state {
+			return true
+		}
+		all = append(all, s)
+		return true
+	})
+
+	total := len(all)
+
+	// Sort by created_at descending (newest first)
+	sort.Slice(all, func(i, j int) bool {
+		return all[i].CreatedAt > all[j].CreatedAt
+	})
+
+	if offset >= len(all) {
+		return nil, total
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+	return all[offset:end], total
 }
 
 // Cancel cancels a download task.
@@ -366,15 +478,28 @@ func (m *Manager) Retry(id string) error {
 
 	// Remove old task and create a new one with the same request
 	wasSkipped := st.State == model.StateSkipped
+	// Check if partial temp file exists for resume
+	old.mu.RLock()
+	oldTempPath := old.tempPath
+	old.mu.RUnlock()
+	resumeFrom := int64(0)
+	if oldTempPath != "" {
+		if info, err := os.Stat(oldTempPath); err == nil && info.Size() > 0 {
+			resumeFrom = info.Size()
+			slog.Info("retry with resume from partial file", "id", id, "bytes", resumeFrom)
+		}
+	}
+
 	m.tasks.Delete(id)
 	ctx, cancel := context.WithCancel(context.Background())
 	task := NewTask(id, old.req, cancel)
 	task.forceDownload = wasSkipped // bypass skip check when retrying a skipped task
+	task.tempPath = oldTempPath     // preserve temp path for resume
 	task.onChange = func() { m.schedulePersist() }
 	m.tasks.Store(id, task)
 	m.persist()
 
-	go m.executeDownload(ctx, task, old.req)
+	go m.executeDownload(ctx, task, old.req, resumeFrom)
 	return nil
 }
 
