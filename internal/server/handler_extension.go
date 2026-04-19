@@ -4,33 +4,34 @@ import (
 	"archive/zip"
 	"bytes"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
+
+	dlrelay "github.com/tjst-t/dlrelay"
 )
 
 // handleExtensionZip serves the browser extension as a zip file
 // with the server URL pre-configured so the user doesn't need to set it up manually.
+//
+// Source preference:
+//  1. If extensionDir is configured and exists on disk, read from there (dev override).
+//  2. Otherwise fall back to the extension files embedded into the binary.
 func (s *Server) handleExtensionZip(w http.ResponseWriter, r *http.Request) {
-	extDir := s.extensionDir
-	if extDir == "" {
-		writeError(w, http.StatusNotFound, "extension directory not configured")
-		return
-	}
-
-	if _, err := os.Stat(extDir); err != nil {
-		writeError(w, http.StatusNotFound, "extension directory not found")
+	extFS, err := s.extensionFS()
+	if err != nil {
+		slog.Error("extension source unavailable", "error", err)
+		writeError(w, http.StatusInternalServerError, "extension source unavailable")
 		return
 	}
 
 	base := safeServerURL(r)
 
-	// Buffer the zip in memory so we can return a proper error on failure
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
-	err := filepath.WalkDir(extDir, func(path string, d fs.DirEntry, err error) error {
+	err = fs.WalkDir(extFS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -38,26 +39,17 @@ func (s *Server) handleExtensionZip(w http.ResponseWriter, r *http.Request) {
 			return nil
 		}
 
-		// Skip SVG source files and hidden files
 		name := d.Name()
 		if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".svg") {
 			return nil
 		}
 
-		relPath, err := filepath.Rel(extDir, path)
-		if err != nil {
-			return err
-		}
-		// Zip spec requires forward slashes
-		relPath = filepath.ToSlash(relPath)
-
-		data, err := os.ReadFile(path)
+		data, err := fs.ReadFile(extFS, path)
 		if err != nil {
 			return err
 		}
 
-		// Inject server URL into background.js and popup.js defaults
-		if relPath == "background.js" || relPath == "popup/popup.js" {
+		if path == "background.js" || path == "popup/popup.js" {
 			data = []byte(strings.Replace(
 				string(data),
 				`serverUrl: "",`,
@@ -66,7 +58,7 @@ func (s *Server) handleExtensionZip(w http.ResponseWriter, r *http.Request) {
 			))
 		}
 
-		f, err := zw.Create(relPath)
+		f, err := zw.Create(path)
 		if err != nil {
 			return err
 		}
@@ -87,4 +79,17 @@ func (s *Server) handleExtensionZip(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", "attachment; filename=dlrelay-extension.zip")
 	w.Write(buf.Bytes())
+}
+
+// extensionFS returns an fs.FS rooted at the extension source — the on-disk
+// directory when configured and present, otherwise the embedded copy.
+func (s *Server) extensionFS() (fs.FS, error) {
+	if s.extensionDir != "" {
+		if _, err := os.Stat(s.extensionDir); err == nil {
+			return os.DirFS(s.extensionDir), nil
+		} else {
+			slog.Warn("configured extension_dir not accessible, falling back to embedded", "dir", s.extensionDir, "error", err)
+		}
+	}
+	return fs.Sub(dlrelay.ExtensionFS, "extension")
 }

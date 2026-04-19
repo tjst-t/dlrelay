@@ -324,7 +324,11 @@ func TestExtensionZipEndpoint(t *testing.T) {
 	}
 }
 
-func TestExtensionZipNotConfigured(t *testing.T) {
+// TestExtensionZipEmbeddedFallback verifies that when no extensionDir is
+// configured the server still serves /api/extension.zip from the files
+// embedded into the binary. This is the default in release binaries and the
+// Docker image, where the extension source is not shipped as a loose directory.
+func TestExtensionZipEmbeddedFallback(t *testing.T) {
 	ts := testutil.TestServer(t)
 
 	resp, err := http.Get(ts.URL + "/api/extension.zip")
@@ -333,8 +337,42 @@ func TestExtensionZipNotConfigured(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("expected 404 when extension dir not configured, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from embedded fallback, got %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/zip" {
+		t.Fatalf("expected application/zip, got %s", ct)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		t.Fatalf("failed to parse zip: %v", err)
+	}
+
+	names := map[string]bool{}
+	for _, f := range zr.File {
+		names[f.Name] = true
+		if strings.HasSuffix(f.Name, ".svg") {
+			t.Errorf("embedded zip should not contain SVG file: %s", f.Name)
+		}
+	}
+	for _, required := range []string{"manifest.json", "background.js", "popup/popup.js"} {
+		if !names[required] {
+			t.Errorf("embedded zip missing %s", required)
+		}
+	}
+
+	for _, f := range zr.File {
+		if f.Name != "background.js" {
+			continue
+		}
+		rc, _ := f.Open()
+		data, _ := io.ReadAll(rc)
+		rc.Close()
+		if !bytes.Contains(data, []byte(`serverUrl: "`+ts.URL+`"`)) {
+			t.Errorf("background.js should have server URL injected, got: %s", data)
+		}
 	}
 }
 
