@@ -41,19 +41,21 @@ func TestSanitizeOutputFilename(t *testing.T) {
 }
 
 func TestSanitizeOutputFilenameTruncates(t *testing.T) {
-	// Long Japanese title that triggered ENAMETOOLONG when yt-dlp appended
-	// ".ytdl" to the output filename (each Japanese rune is 3 bytes in UTF-8).
+	// Long Japanese title that previously triggered:
+	//   - [Errno 36] ENAMETOOLONG  on ext4 (255-byte limit) before truncation
+	//   - [Errno 95] ENOTSUP       on a NAS share at 244 bytes
+	// We now cap at outputFilenameMaxBytes (180) to stay safely under both.
 	longTitle := "大人のパフォーマーによる熱くて情熱的なシーンをご覧ください。" +
 		"この魅力的なビデオでは、親密で官能的な瞬間を体験できます。" +
 		"大人向けコンテンツ愛好家に最適です。 エロ動画 - SpankBang.mp4"
 	got := sanitizeOutputFilename(longTitle)
 
-	// Must fit within filesystem limit even after yt-dlp's ".ytdl" suffix
-	// and uniquePath's potential "_N" collision suffix.
+	// Must fit within the conservative output limit even after yt-dlp's
+	// ".ytdl" suffix and uniquePath's potential "_N" collision suffix.
 	worstCase := got + "_9999.ytdl"
-	if len(worstCase) > maxFilenameBytes {
+	if len(worstCase) > outputFilenameMaxBytes {
 		t.Errorf("sanitized name + worst-case suffix is %d bytes (max %d): %q",
-			len(worstCase), maxFilenameBytes, worstCase)
+			len(worstCase), outputFilenameMaxBytes, worstCase)
 	}
 
 	// Extension must be preserved.

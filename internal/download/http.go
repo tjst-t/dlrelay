@@ -191,7 +191,21 @@ func HTTPDownload(ctx context.Context, task *Task, downloadDir, tempDir string, 
 // maxFilenameBytes is the maximum filename length in bytes for most filesystems.
 const maxFilenameBytes = 255
 
-// outputFilenameSuffixMargin reserves bytes inside maxFilenameBytes for
+// outputFilenameMaxBytes caps the byte length of the output filename written
+// to disk. We use a tighter limit than the kernel's 255-byte ceiling because:
+//   - SMB/CIFS-mounted NAS shares may reject names that fit ext4 with ENOTSUP
+//     when the server-side filesystem (or protocol encoding) has stricter
+//     rules — we have seen a 244-byte UTF-8 name fail with [Errno 95].
+//   - macOS/HFS+/exFAT use a 255-UTF-16-char limit, so a name with surrogate
+//     pairs consumes more "slots" than its byte count suggests.
+//   - Some NAS firmwares apply per-character substitutions that grow the name
+//     on the wire.
+//
+// 180 bytes leaves comfortable headroom while still allowing ~55 Japanese
+// characters of title — enough to remain descriptive.
+const outputFilenameMaxBytes = 180
+
+// outputFilenameSuffixMargin reserves bytes inside outputFilenameMaxBytes for
 // suffixes that downstream tools append to the output filename:
 //   - yt-dlp's ".ytdl" / ".part" metadata/partial files (5 bytes)
 //   - uniquePath's "_N" collision-avoidance suffix (e.g. "_9999", up to 5 bytes)
@@ -210,11 +224,13 @@ const outputFilenameSuffixMargin = 15
 //     supported" during remux. We replace ASCII commas with U+FF0C (，) and strip
 //     leading separator runes from empty fields.
 //
-//  2. Titles longer than ~85 Japanese characters exceed the 255-byte filename
-//     limit on common filesystems (ext4/btrfs). yt-dlp compounds this by
-//     appending ".ytdl"/".part" to the output, so a 255-byte name still fails
-//     with [Errno 36]. We truncate the base at a UTF-8 rune boundary to leave
-//     room for those suffixes and uniquePath's "_N" suffix.
+//  2. Long titles exceed filesystem filename limits. The ext4/btrfs ceiling is
+//     255 bytes, but SMB/CIFS-mounted NAS shares and HFS+/exFAT (UTF-16 counted)
+//     can reject shorter names — we have seen 244-byte UTF-8 names fail with
+//     [Errno 95] ENOTSUP. yt-dlp also appends ".ytdl"/".part" to the output, so
+//     even a name that fits the kernel limit can fail when the suffix is added.
+//     We truncate the base at a UTF-8 rune boundary to outputFilenameMaxBytes,
+//     reserving outputFilenameSuffixMargin bytes for downstream suffixes.
 func sanitizeOutputFilename(name string) string {
 	if name == "" {
 		return name
@@ -227,7 +243,7 @@ func sanitizeOutputFilename(name string) string {
 		base = "video"
 	}
 
-	maxBase := maxFilenameBytes - len(ext) - outputFilenameSuffixMargin
+	maxBase := outputFilenameMaxBytes - len(ext) - outputFilenameSuffixMargin
 	if maxBase < 20 {
 		maxBase = 20
 	}
