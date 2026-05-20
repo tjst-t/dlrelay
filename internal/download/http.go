@@ -190,6 +190,27 @@ func HTTPDownload(ctx context.Context, task *Task, downloadDir, tempDir string, 
 // maxFilenameBytes is the maximum filename length in bytes for most filesystems.
 const maxFilenameBytes = 255
 
+// sanitizeOutputFilename normalizes a filename so ffmpeg can open it as an output.
+// ffmpeg's output URL parsing treats a comma after the filename as the start of
+// muxer options (e.g. "file.mp4,format=mp4"), so titles that produce leading
+// empty comma-separated fields like ", , 本文.mp4" — common for some 123av-style
+// fc2-ppv pages — cause "Error opening output ... : Not supported" during remux.
+// We replace ASCII commas with the full-width comma U+FF0C, then strip any
+// leading separator runes that came from empty fields.
+func sanitizeOutputFilename(name string) string {
+	if name == "" {
+		return name
+	}
+	ext := filepath.Ext(name)
+	base := strings.TrimSuffix(name, ext)
+	base = strings.ReplaceAll(base, ",", "，")
+	base = strings.TrimLeft(base, " \t　，")
+	if base == "" {
+		base = "video"
+	}
+	return base + ext
+}
+
 // sanitizePathLength truncates the filename component of a path to fit within
 // the filesystem's maximum filename length (255 bytes on ext4/btrfs/etc.).
 func sanitizePathLength(path string) string {

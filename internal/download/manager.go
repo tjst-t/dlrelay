@@ -111,6 +111,8 @@ func (m *Manager) loadAndResume() {
 		if createdAt.IsZero() {
 			createdAt = time.Now()
 		}
+		// Sanitize for records persisted before sanitizeOutputFilename was introduced.
+		rec.Request.Filename = sanitizeOutputFilename(rec.Request.Filename)
 
 		switch rec.State {
 		case model.StateCompleted, model.StateFailed, model.StateCancelled, model.StateSkipped:
@@ -382,6 +384,7 @@ func (m *Manager) Submit(req model.DownloadRequest) (string, error) {
 			return "", fmt.Errorf("invalid audio URL: %w", err)
 		}
 	}
+	req.Filename = sanitizeOutputFilename(req.Filename)
 
 	id := uuid.New().String()
 	ctx, cancel := context.WithCancel(context.Background())

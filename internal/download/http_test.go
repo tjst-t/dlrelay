@@ -13,6 +13,32 @@ import (
 	"github.com/tjst-t/dlrelay/internal/model"
 )
 
+func TestSanitizeOutputFilename(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"plain", "video.mp4", "video.mp4"},
+		{"leading empty comma fields", ", , 本文.mp4", "本文.mp4"},
+		{"leading commas no spaces", ",,title.mp4", "title.mp4"},
+		{"comma between words", "foo, bar.mp4", "foo， bar.mp4"},
+		{"only commas and spaces", ", , .mp4", "video.mp4"},
+		{"japanese fullwidth space prefix", "　タイトル.mp4", "タイトル.mp4"},
+		{"no extension", ",,name", "name"},
+		{"title with commas only", "a,b,c.mp4", "a，b，c.mp4"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sanitizeOutputFilename(tt.in)
+			if got != tt.want {
+				t.Errorf("sanitizeOutputFilename(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSanitizePathLength(t *testing.T) {
 	tests := []struct {
 		name     string
