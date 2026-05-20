@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/tjst-t/dlrelay/internal/model"
 )
@@ -190,13 +191,30 @@ func HTTPDownload(ctx context.Context, task *Task, downloadDir, tempDir string, 
 // maxFilenameBytes is the maximum filename length in bytes for most filesystems.
 const maxFilenameBytes = 255
 
-// sanitizeOutputFilename normalizes a filename so ffmpeg can open it as an output.
-// ffmpeg's output URL parsing treats a comma after the filename as the start of
-// muxer options (e.g. "file.mp4,format=mp4"), so titles that produce leading
-// empty comma-separated fields like ", , 本文.mp4" — common for some 123av-style
-// fc2-ppv pages — cause "Error opening output ... : Not supported" during remux.
-// We replace ASCII commas with the full-width comma U+FF0C, then strip any
-// leading separator runes that came from empty fields.
+// outputFilenameSuffixMargin reserves bytes inside maxFilenameBytes for
+// suffixes that downstream tools append to the output filename:
+//   - yt-dlp's ".ytdl" / ".part" metadata/partial files (5 bytes)
+//   - uniquePath's "_N" collision-avoidance suffix (e.g. "_9999", up to 5 bytes)
+//   - a small safety margin
+const outputFilenameSuffixMargin = 15
+
+// sanitizeOutputFilename normalizes a filename so ffmpeg can open it as an output
+// and so the resulting on-disk name fits within the filesystem's filename limit.
+//
+// Two issues are handled:
+//
+//  1. ffmpeg's output URL parsing treats a comma after the filename as the start
+//     of muxer options (e.g. "file.mp4,format=mp4"), so titles that produce
+//     leading empty comma-separated fields like ", , 本文.mp4" — common for some
+//     123av-style fc2-ppv pages — cause "Error opening output ... : Not
+//     supported" during remux. We replace ASCII commas with U+FF0C (，) and strip
+//     leading separator runes from empty fields.
+//
+//  2. Titles longer than ~85 Japanese characters exceed the 255-byte filename
+//     limit on common filesystems (ext4/btrfs). yt-dlp compounds this by
+//     appending ".ytdl"/".part" to the output, so a 255-byte name still fails
+//     with [Errno 36]. We truncate the base at a UTF-8 rune boundary to leave
+//     room for those suffixes and uniquePath's "_N" suffix.
 func sanitizeOutputFilename(name string) string {
 	if name == "" {
 		return name
@@ -207,6 +225,18 @@ func sanitizeOutputFilename(name string) string {
 	base = strings.TrimLeft(base, " \t　，")
 	if base == "" {
 		base = "video"
+	}
+
+	maxBase := maxFilenameBytes - len(ext) - outputFilenameSuffixMargin
+	if maxBase < 20 {
+		maxBase = 20
+	}
+	for len(base) > maxBase {
+		_, size := utf8.DecodeLastRuneInString(base)
+		if size == 0 {
+			break
+		}
+		base = base[:len(base)-size]
 	}
 	return base + ext
 }

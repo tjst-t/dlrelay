@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/tjst-t/dlrelay/internal/model"
 )
@@ -37,6 +38,36 @@ func TestSanitizeOutputFilename(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSanitizeOutputFilenameTruncates(t *testing.T) {
+	// Long Japanese title that triggered ENAMETOOLONG when yt-dlp appended
+	// ".ytdl" to the output filename (each Japanese rune is 3 bytes in UTF-8).
+	longTitle := "大人のパフォーマーによる熱くて情熱的なシーンをご覧ください。" +
+		"この魅力的なビデオでは、親密で官能的な瞬間を体験できます。" +
+		"大人向けコンテンツ愛好家に最適です。 エロ動画 - SpankBang.mp4"
+	got := sanitizeOutputFilename(longTitle)
+
+	// Must fit within filesystem limit even after yt-dlp's ".ytdl" suffix
+	// and uniquePath's potential "_N" collision suffix.
+	worstCase := got + "_9999.ytdl"
+	if len(worstCase) > maxFilenameBytes {
+		t.Errorf("sanitized name + worst-case suffix is %d bytes (max %d): %q",
+			len(worstCase), maxFilenameBytes, worstCase)
+	}
+
+	// Extension must be preserved.
+	if filepath.Ext(got) != ".mp4" {
+		t.Errorf("extension changed: got %q, want %q", filepath.Ext(got), ".mp4")
+	}
+
+	// Result must still be valid UTF-8 (no mid-rune cut).
+	if !utf8.ValidString(got) {
+		t.Errorf("truncated filename is not valid UTF-8: %q", got)
+	}
+
+	t.Logf("input %d bytes → output %d bytes (worst-case %d)",
+		len(longTitle), len(got), len(worstCase))
 }
 
 func TestSanitizePathLength(t *testing.T) {
