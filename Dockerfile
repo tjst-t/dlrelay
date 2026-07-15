@@ -8,10 +8,12 @@ COPY . .
 RUN CGO_ENABLED=0 go build -ldflags="-s -w -X github.com/tjst-t/dlrelay/internal/version.Version=${VERSION}" -o /bin/dlrelay-server ./cmd/server
 
 FROM alpine:3.21
-RUN apk add --no-cache ffmpeg ca-certificates nodejs python3 py3-pip \
+RUN apk add --no-cache ffmpeg ca-certificates nodejs python3 py3-pip tini \
     && pip3 install --no-cache-dir --break-system-packages "yt-dlp[default,curl-cffi]"
 COPY --from=builder /bin/dlrelay-server /usr/local/bin/
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 EXPOSE 8090
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD wget -q --spider http://localhost:8090/api/health || exit 1
-ENTRYPOINT ["dlrelay-server"]
+ENTRYPOINT ["/sbin/tini", "--", "docker-entrypoint.sh"]

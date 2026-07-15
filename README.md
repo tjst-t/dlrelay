@@ -167,6 +167,8 @@ max_concurrent = 3
 | `API_KEY` | (なし) | API認証キー（設定時、書き込みAPIに `X-API-Key` ヘッダーが必要） |
 | `DOWNLOAD_RULES` | (なし) | ドメイン別ダウンロード先ルール（`domain:/path` のカンマ区切り） |
 | `CHECK_DIRS` | (なし) | 重複チェック用ディレクトリ（カンマ区切り） |
+| `YTDLP_AUTO_UPDATE` | `1` | `0` にするとコンテナ内での yt-dlp 自動更新を無効化 |
+| `YTDLP_UPDATE_INTERVAL` | `86400` | yt-dlp 自動更新の間隔（秒） |
 
 すべてのパス設定で `~` によるホームディレクトリ展開が使える。
 
@@ -308,16 +310,11 @@ services:
 ### イメージの内容
 
 - ベース: `alpine:3.21`
-- 含まれるツール: `ffmpeg`, `ffprobe`, `ca-certificates`
-- **含まれないツール**: `yt-dlp`, `Node.js`, `curl_cffi`（yt-dlp を使う場合は別途インストールが必要）
+- 含まれるツール: `ffmpeg`, `ffprobe`, `ca-certificates`, `yt-dlp`, `Node.js`, `curl_cffi`
 
-yt-dlp を含めたカスタムイメージの例:
+### yt-dlp の自動更新
 
-```dockerfile
-FROM ghcr.io/tjst-t/dlrelay-server:latest
-RUN apk add --no-cache python3 py3-pip nodejs && \
-    pip3 install --break-system-packages yt-dlp curl_cffi
-```
+yt-dlp はイメージのビルド時点のバージョンで焼き込まれるが、サイト側の対策変更（SpankBang の 403 Forbidden 等）への追従はyt-dlp側の更新頻度に依存する。dlrelay自体のコード変更がなくてもイメージが再ビルドされないため、コンテナ起動時（entrypoint）に `pip install -U --break-system-packages "yt-dlp[default,curl-cffi]"` をバックグラウンドで実行し、以後 `YTDLP_UPDATE_INTERVAL`（デフォルト24時間）ごとに再実行することで、yt-dlp本体のバージョンをイメージのライフサイクルから切り離している。無効化するには `YTDLP_AUTO_UPDATE=0` を設定する。
 
 ## リリース
 
